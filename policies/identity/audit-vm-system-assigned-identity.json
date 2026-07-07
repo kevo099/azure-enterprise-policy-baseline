@@ -1,0 +1,52 @@
+{
+  "name": "audit-vm-system-assigned-identity",
+  "properties": {
+    "displayName": "[Baseline] Virtual machines should use a system-assigned managed identity",
+    "policyType": "Custom",
+    "mode": "Indexed",
+    "description": "Audits virtual machines that do not have a system-assigned managed identity. Managed identities let workloads authenticate to Azure services without credentials in code or config, and are a prerequisite for guest configuration, Azure Monitor Agent, and most modern management extensions.",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Identity"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect",
+          "description": "Audit reports VMs without a system-assigned identity; Disabled turns the policy off."
+        },
+        "allowedValues": [
+          "Audit",
+          "Disabled"
+        ],
+        "defaultValue": "Audit"
+      }
+    },
+    "policyRule": {
+      "if": {
+        "allOf": [
+          {
+            "field": "type",
+            "equals": "Microsoft.Compute/virtualMachines"
+          },
+          {
+            "anyOf": [
+              {
+                "field": "identity.type",
+                "exists": "false"
+              },
+              {
+                "field": "identity.type",
+                "notContains": "SystemAssigned"
+              }
+            ]
+          }
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]"
+      }
+    }
+  }
+}

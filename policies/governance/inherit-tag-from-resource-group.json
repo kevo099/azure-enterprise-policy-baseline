@@ -1,0 +1,64 @@
+{
+  "name": "inherit-tag-from-resource-group",
+  "properties": {
+    "displayName": "[Baseline] Resources inherit the required tag from their resource group",
+    "policyType": "Custom",
+    "mode": "Indexed",
+    "description": "Adds the required tag (default: CostCenter) to any resource that is created or updated without it, copying the value from the parent resource group. Combined with the resource-group tag requirement this gives full cost-attribution coverage with zero per-deployment effort. Existing untagged resources can be brought into compliance with a remediation task.",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Governance"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect",
+          "description": "Modify rewrites incoming requests and powers remediation tasks; Disabled turns the policy off."
+        },
+        "allowedValues": [
+          "Modify",
+          "Disabled"
+        ],
+        "defaultValue": "Modify"
+      },
+      "tagName": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Tag name to inherit",
+          "description": "The tag copied from the resource group when a resource lacks it."
+        },
+        "defaultValue": "CostCenter"
+      }
+    },
+    "policyRule": {
+      "if": {
+        "allOf": [
+          {
+            "field": "[concat('tags[', parameters('tagName'), ']')]",
+            "exists": "false"
+          },
+          {
+            "value": "[resourceGroup().tags[parameters('tagName')]]",
+            "notEquals": ""
+          }
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]",
+        "details": {
+          "roleDefinitionIds": [
+            "/providers/microsoft.authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c"
+          ],
+          "operations": [
+            {
+              "operation": "add",
+              "field": "[concat('tags[', parameters('tagName'), ']')]",
+              "value": "[resourceGroup().tags[parameters('tagName')]]"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "name": "audit-vm-backup-protection",
+  "properties": {
+    "displayName": "[Baseline] Virtual machines should be protected by Azure Backup",
+    "policyType": "Custom",
+    "mode": "Indexed",
+    "description": "Audits virtual machines that are not protected by Azure Backup. A VM is compliant when a backup-protected item exists for it in a Recovery Services vault. Surfacing unprotected machines on the compliance dashboard is the first step of a backup rollout; pair with Microsoft's built-in DeployIfNotExists backup policies once a vault strategy is settled.",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Operations"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect",
+          "description": "AuditIfNotExists reports VMs without backup protection; Disabled turns the policy off."
+        },
+        "allowedValues": [
+          "AuditIfNotExists",
+          "Disabled"
+        ],
+        "defaultValue": "AuditIfNotExists"
+      }
+    },
+    "policyRule": {
+      "if": {
+        "allOf": [
+          {
+            "field": "type",
+            "equals": "Microsoft.Compute/virtualMachines"
+          }
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]",
+        "details": {
+          "type": "Microsoft.RecoveryServices/backupprotecteditems"
+        }
+      }
+    }
+  }
+}

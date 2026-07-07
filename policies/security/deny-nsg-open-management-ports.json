@@ -1,0 +1,118 @@
+{
+  "name": "deny-nsg-open-management-ports",
+  "properties": {
+    "displayName": "[Baseline] NSG rules should not expose management ports to the Internet",
+    "policyType": "Custom",
+    "mode": "All",
+    "description": "Denies network security group rules that allow inbound traffic from the Internet (*, Internet, 0.0.0.0 or 0.0.0.0/0) to management ports such as SSH (22) and RDP (3389), or to all ports via a wildcard destination. Management access should flow through Bastion, a VPN, or a jump host instead. Note: rules using numeric ranges (e.g. 3000-4000) that happen to span a blocked port are not detected; see docs/DESIGN.md.",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Security"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect",
+          "description": "The effect the policy applies when an NSG rule exposes a blocked port to the Internet."
+        },
+        "allowedValues": [
+          "Audit",
+          "Deny",
+          "Disabled"
+        ],
+        "defaultValue": "Deny"
+      },
+      "ports": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Blocked inbound ports",
+          "description": "Destination ports that must not be reachable from the Internet, as strings."
+        },
+        "defaultValue": [
+          "22",
+          "3389"
+        ]
+      }
+    },
+    "policyRule": {
+      "if": {
+        "allOf": [
+          {
+            "field": "type",
+            "equals": "Microsoft.Network/networkSecurityGroups/securityRules"
+          },
+          {
+            "field": "Microsoft.Network/networkSecurityGroups/securityRules/access",
+            "equals": "Allow"
+          },
+          {
+            "field": "Microsoft.Network/networkSecurityGroups/securityRules/direction",
+            "equals": "Inbound"
+          },
+          {
+            "anyOf": [
+              {
+                "field": "Microsoft.Network/networkSecurityGroups/securityRules/destinationPortRange",
+                "equals": "*"
+              },
+              {
+                "field": "Microsoft.Network/networkSecurityGroups/securityRules/destinationPortRange",
+                "in": "[parameters('ports')]"
+              },
+              {
+                "count": {
+                  "field": "Microsoft.Network/networkSecurityGroups/securityRules/destinationPortRanges[*]",
+                  "where": {
+                    "anyOf": [
+                      {
+                        "field": "Microsoft.Network/networkSecurityGroups/securityRules/destinationPortRanges[*]",
+                        "equals": "*"
+                      },
+                      {
+                        "field": "Microsoft.Network/networkSecurityGroups/securityRules/destinationPortRanges[*]",
+                        "in": "[parameters('ports')]"
+                      }
+                    ]
+                  }
+                },
+                "greater": 0
+              }
+            ]
+          },
+          {
+            "anyOf": [
+              {
+                "field": "Microsoft.Network/networkSecurityGroups/securityRules/sourceAddressPrefix",
+                "in": [
+                  "*",
+                  "Internet",
+                  "0.0.0.0",
+                  "0.0.0.0/0"
+                ]
+              },
+              {
+                "count": {
+                  "field": "Microsoft.Network/networkSecurityGroups/securityRules/sourceAddressPrefixes[*]",
+                  "where": {
+                    "field": "Microsoft.Network/networkSecurityGroups/securityRules/sourceAddressPrefixes[*]",
+                    "in": [
+                      "*",
+                      "Internet",
+                      "0.0.0.0",
+                      "0.0.0.0/0"
+                    ]
+                  }
+                },
+                "greater": 0
+              }
+            ]
+          }
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]"
+      }
+    }
+  }
+}

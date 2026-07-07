@@ -1,0 +1,120 @@
+# Design notes
+
+How this baseline was constructed, the decisions baked into it, and the sharp
+edges to know about before enforcing it.
+
+## Sources and method
+
+Each policy re-implements a control that appears in Microsoft's own published
+governance guidance, selected for being broadly applicable to any enterprise
+rather than industry-specific:
+
+- **Azure Policy built-in catalog** — the rule *patterns* (alias choices,
+  `exists`/`equals` handling for properties with platform defaults, the
+  `requestContext().apiVersion` guard, AuditIfNotExists existence checks,
+  DeployIfNotExists deployment shape) follow how Microsoft's built-ins solve
+  the same problems, because those patterns encode years of evaluation-engine
+  edge cases.
+- **Azure Landing Zones (Enterprise-Scale)** — the control selection mirrors
+  the guardrails ALZ assigns by default: deny insecure storage transport,
+  deny Internet-exposed management ports, deny public IPs on NICs, restrict
+  locations, enforce tagging.
+- **Cloud Adoption Framework governance disciplines** — the category split
+  (security baseline, cost/resource consistency, identity, operations) comes
+  from CAF's Five Disciplines of Cloud Governance.
+
+Custom re-implementations were chosen over assigning built-ins directly so
+that the definitions are version-controlled here, readable end-to-end,
+consistently parameterized (every policy exposes `effect`), and independent of
+built-in IDs that Microsoft occasionally deprecates.
+
+## Decisions
+
+**Every effect is a parameter.** Definitions never hard-code their effect.
+The initiative re-exposes each one, so a single assignment can mix enforcement
+levels and a brownfield estate can start at `Audit` everywhere without forking
+JSON. Defaults are deliberately strict (`Deny`) because a baseline should be
+secure by default; the rollout SOP in the README is the escape hatch.
+
+**Properties with platform defaults are treated as non-compliant when
+absent.** `allowBlobPublicAccess`, `enablePurgeProtection`, and
+`minimumTlsVersion` are flagged when omitted, not just when explicitly bad,
+because the platform default for each is the insecure value. The one
+exception is storage HTTPS enforcement, where API versions ≥ 2019-04-01
+default to secure — the rule uses a `requestContext().apiVersion` guard so
+modern deployments that omit the property aren't falsely denied (this mirrors
+the built-in).
+
+**`count` expressions instead of double negation.** Array conditions like
+"any ipConfiguration has a public IP" are written as
+`count(... where ...) > 0` rather than the equivalent but harder-to-review
+`not(... notLike ...)` construction some built-ins use.
+
+**Tag governance is a two-policy system.** Deny untagged *resource groups*
+(humans create those deliberately) + Modify-inherit onto *resources* (created
+constantly, often by automation). Enforcing tags on every resource directly
+generates deployment friction; inheriting from the RG gives the same cost
+attribution coverage for free. The Modify policy uses the Contributor role
+for remediation to match Microsoft's built-in inherit-tag policy; scope it
+down to Tag Contributor if your security review prefers least privilege.
+
+**Diagnostics DINE uses `categoryGroup: "audit"`.** Category groups track
+new log categories automatically, unlike enumerating categories. The
+existence condition requires an enabled `audit` category group pointed at the
+central workspace, which matches Microsoft's current-generation diagnostics
+built-ins.
+
+**Initiative references use a `{{DEFINITION_SCOPE}}` placeholder.** Policy
+set definitions must reference definitions by full resource ID, which isn't
+known until deploy time. `deploy.sh` substitutes the subscription or
+management group scope. The validator enforces that the placeholder is used
+and that every referenced definition exists on disk (and vice versa — a
+definition missing from the initiative fails CI).
+
+**Org-specific values have no defaults.** Allowed locations, allowed VM SKUs,
+and the Log Analytics workspace ID must be supplied at assignment. Any
+default this repo could ship would be wrong for most organizations, and a
+wrong-but-working default is how policy ends up silently ineffective.
+
+## Known limitations
+
+- **NSG port policy doesn't parse numeric ranges.** A rule allowing
+  `3000-4000` isn't flagged even though it spans no blocked port... and one
+  allowing `20-30` isn't flagged even though it spans 22. Exact matches,
+  wildcards, and `destinationPortRanges` arrays are covered. This is the same
+  limitation the ALZ deny-management-ports policy has; range arithmetic isn't
+  expressible in policy language.
+- **NSG rules created inline** (as `securityRules[]` in the parent NSG PUT,
+  e.g. by some Terraform configurations) are evaluated as the child
+  `securityRules` type only on subsequent per-rule writes. Compliance scans
+  still catch them after creation.
+- **`allowed-vm-skus` covers `Microsoft.Compute/virtualMachines` only**, not
+  scale-set SKU properties. Add a VMSS variant if scale sets are common in
+  your estate.
+- **The diagnostics DINE can conflict with pre-existing settings** that send
+  the same categories to a different sink under a different setting name
+  (Azure rejects duplicate category/destination pairs). Existing vaults with
+  bespoke diagnostics should get an exemption instead of remediation.
+- **`allowed-locations` exempts `global`** and B2C directories; it does not
+  govern resource group locations themselves (add the RG-location variant if
+  you need it).
+
+## Testing a change
+
+1. `python3 scripts/validate.py` — structural correctness.
+2. Deploy to a sandbox subscription: `./scripts/deploy.sh -s <sandbox-sub>`.
+   Azure performs full server-side validation of rules, aliases, and
+   parameter plumbing at creation time, so a clean deploy is a meaningful
+   syntax check.
+3. Assign to a throwaway resource group with `--dry-run`, deploy a
+   deliberately non-compliant resource (e.g. a storage account with
+   `--allow-blob-public-access true`), then
+   `az policy state trigger-scan --no-wait` and confirm it shows
+   non-compliant.
+4. Promote the same assignment to enforcing and confirm the create is denied.
+
+## Versioning
+
+Definitions carry a semantic `version` in metadata. Bump patch for
+description/metadata edits, minor for rule changes that don't widen scope,
+major for anything that could newly deny a previously allowed request.

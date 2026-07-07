@@ -1,0 +1,47 @@
+{
+  "name": "deny-storage-public-blob-access",
+  "properties": {
+    "displayName": "[Baseline] Storage accounts should disallow public blob access",
+    "policyType": "Custom",
+    "mode": "Indexed",
+    "description": "Denies storage accounts that permit anonymous public read access to containers and blobs. Anonymous access is a leading cause of accidental data exposure; requiring allowBlobPublicAccess to be explicitly false forces intentional, account-level opt-out. Accounts that omit the property are flagged because older API versions default it to enabled.",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Security"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect",
+          "description": "The effect the policy applies when a storage account permits public blob access."
+        },
+        "allowedValues": [
+          "Audit",
+          "Deny",
+          "Disabled"
+        ],
+        "defaultValue": "Deny"
+      }
+    },
+    "policyRule": {
+      "if": {
+        "allOf": [
+          {
+            "field": "type",
+            "equals": "Microsoft.Storage/storageAccounts"
+          },
+          {
+            "not": {
+              "field": "Microsoft.Storage/storageAccounts/allowBlobPublicAccess",
+              "equals": "false"
+            }
+          }
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]"
+      }
+    }
+  }
+}

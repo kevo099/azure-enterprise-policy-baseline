@@ -1,0 +1,24 @@
+{
+  "allowedLocations": {
+    "value": [
+      "eastus",
+      "eastus2",
+      "westus2"
+    ]
+  },
+  "allowedVmSkus": {
+    "value": [
+      "Standard_B2s",
+      "Standard_B2ms",
+      "Standard_D2s_v5",
+      "Standard_D4s_v5",
+      "Standard_E4s_v5"
+    ]
+  },
+  "logAnalyticsWorkspaceId": {
+    "value": "/subscriptions/<subscription-id>/resourceGroups/<rg-name>/providers/Microsoft.OperationalInsights/workspaces/<workspace-name>"
+  },
+  "requiredTagName": {
+    "value": "CostCenter"
+  }
+}

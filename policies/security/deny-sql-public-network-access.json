@@ -1,0 +1,45 @@
+{
+  "name": "deny-sql-public-network-access",
+  "properties": {
+    "displayName": "[Baseline] SQL servers should have public network access disabled",
+    "policyType": "Custom",
+    "mode": "Indexed",
+    "description": "Denies Azure SQL logical servers whose public network access is not explicitly disabled. Database connectivity should go through private endpoints so the server is never reachable from the public Internet, regardless of firewall rules. Servers that omit the property are flagged because the platform default is enabled.",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Security"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect",
+          "description": "The effect the policy applies when a SQL server allows public network access."
+        },
+        "allowedValues": [
+          "Audit",
+          "Deny",
+          "Disabled"
+        ],
+        "defaultValue": "Deny"
+      }
+    },
+    "policyRule": {
+      "if": {
+        "allOf": [
+          {
+            "field": "type",
+            "equals": "Microsoft.Sql/servers"
+          },
+          {
+            "field": "Microsoft.Sql/servers/publicNetworkAccess",
+            "notEquals": "Disabled"
+          }
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]"
+      }
+    }
+  }
+}

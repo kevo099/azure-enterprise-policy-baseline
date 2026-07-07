@@ -1,0 +1,429 @@
+{
+  "name": "enterprise-baseline",
+  "properties": {
+    "displayName": "[Baseline] Enterprise governance baseline",
+    "description": "Bundles the fifteen enterprise baseline policies (security, governance, operations, identity) into a single assignable initiative. Every policy's effect is surfaced as an initiative parameter so the whole baseline can be flipped between Audit and Deny per policy during rollout without editing definitions.",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Governance"
+    },
+    "parameters": {
+      "effectStorageSecureTransfer": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect: storage secure transfer (HTTPS)",
+          "description": "Effect for the storage secure-transfer policy."
+        },
+        "allowedValues": [
+          "Audit",
+          "Deny",
+          "Disabled"
+        ],
+        "defaultValue": "Deny"
+      },
+      "effectStorageMinimumTls": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect: storage minimum TLS",
+          "description": "Effect for the storage minimum-TLS policy."
+        },
+        "allowedValues": [
+          "Audit",
+          "Deny",
+          "Disabled"
+        ],
+        "defaultValue": "Deny"
+      },
+      "minimumTlsVersion": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Minimum TLS version",
+          "description": "The lowest TLS version a storage account may advertise as its minimum."
+        },
+        "allowedValues": [
+          "TLS1_1",
+          "TLS1_2"
+        ],
+        "defaultValue": "TLS1_2"
+      },
+      "effectStoragePublicBlobAccess": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect: storage public blob access",
+          "description": "Effect for the storage public-blob-access policy."
+        },
+        "allowedValues": [
+          "Audit",
+          "Deny",
+          "Disabled"
+        ],
+        "defaultValue": "Deny"
+      },
+      "effectNsgOpenManagementPorts": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect: NSG open management ports",
+          "description": "Effect for the NSG management-ports policy."
+        },
+        "allowedValues": [
+          "Audit",
+          "Deny",
+          "Disabled"
+        ],
+        "defaultValue": "Deny"
+      },
+      "blockedInboundPorts": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Blocked inbound ports",
+          "description": "Destination ports that must not be reachable from the Internet, as strings."
+        },
+        "defaultValue": [
+          "22",
+          "3389"
+        ]
+      },
+      "effectNicPublicIp": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect: NIC public IP",
+          "description": "Effect for the NIC public-IP policy."
+        },
+        "allowedValues": [
+          "Audit",
+          "Deny",
+          "Disabled"
+        ],
+        "defaultValue": "Deny"
+      },
+      "effectSqlPublicNetworkAccess": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect: SQL public network access",
+          "description": "Effect for the SQL public-network-access policy."
+        },
+        "allowedValues": [
+          "Audit",
+          "Deny",
+          "Disabled"
+        ],
+        "defaultValue": "Deny"
+      },
+      "effectKeyVaultPurgeProtection": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect: key vault purge protection",
+          "description": "Effect for the key vault purge-protection policy."
+        },
+        "allowedValues": [
+          "Audit",
+          "Deny",
+          "Disabled"
+        ],
+        "defaultValue": "Deny"
+      },
+      "effectRequireTagOnResourceGroups": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect: require tag on resource groups",
+          "description": "Effect for the resource-group tag requirement policy."
+        },
+        "allowedValues": [
+          "Audit",
+          "Deny",
+          "Disabled"
+        ],
+        "defaultValue": "Deny"
+      },
+      "effectInheritTagFromResourceGroup": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect: inherit tag from resource group",
+          "description": "Effect for the tag-inheritance policy."
+        },
+        "allowedValues": [
+          "Modify",
+          "Disabled"
+        ],
+        "defaultValue": "Modify"
+      },
+      "requiredTagName": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Required tag name",
+          "description": "The tag required on resource groups and inherited by their resources."
+        },
+        "defaultValue": "CostCenter"
+      },
+      "effectAllowedLocations": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect: allowed locations",
+          "description": "Effect for the allowed-locations policy."
+        },
+        "allowedValues": [
+          "Audit",
+          "Deny",
+          "Disabled"
+        ],
+        "defaultValue": "Deny"
+      },
+      "allowedLocations": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Allowed locations",
+          "description": "Regions where resources may be deployed.",
+          "strongType": "location"
+        }
+      },
+      "effectAllowedVmSkus": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect: allowed VM SKUs",
+          "description": "Effect for the allowed-VM-SKUs policy."
+        },
+        "allowedValues": [
+          "Audit",
+          "Deny",
+          "Disabled"
+        ],
+        "defaultValue": "Deny"
+      },
+      "allowedVmSkus": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Allowed VM SKUs",
+          "description": "Virtual machine sizes that may be deployed.",
+          "strongType": "vmSKUs"
+        }
+      },
+      "effectVmBackup": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect: VM backup protection",
+          "description": "Effect for the VM backup-protection policy."
+        },
+        "allowedValues": [
+          "AuditIfNotExists",
+          "Disabled"
+        ],
+        "defaultValue": "AuditIfNotExists"
+      },
+      "effectVmManagedDisks": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect: VM managed disks",
+          "description": "Effect for the unmanaged-disks policy."
+        },
+        "allowedValues": [
+          "Audit",
+          "Deny",
+          "Disabled"
+        ],
+        "defaultValue": "Deny"
+      },
+      "effectKeyVaultDiagnostics": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect: key vault diagnostics",
+          "description": "Effect for the key vault diagnostics policy."
+        },
+        "allowedValues": [
+          "DeployIfNotExists",
+          "AuditIfNotExists",
+          "Disabled"
+        ],
+        "defaultValue": "DeployIfNotExists"
+      },
+      "logAnalyticsWorkspaceId": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Log Analytics workspace",
+          "description": "Full resource ID of the Log Analytics workspace that receives key vault audit logs.",
+          "strongType": "omsWorkspace"
+        }
+      },
+      "diagnosticsProfileName": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Diagnostic setting name",
+          "description": "Name given to the diagnostic settings deployed by the baseline."
+        },
+        "defaultValue": "enterprise-baseline-diagnostics"
+      },
+      "effectVmSystemAssignedIdentity": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect: VM system-assigned identity",
+          "description": "Effect for the VM managed-identity policy."
+        },
+        "allowedValues": [
+          "Audit",
+          "Disabled"
+        ],
+        "defaultValue": "Audit"
+      }
+    },
+    "policyDefinitions": [
+      {
+        "policyDefinitionReferenceId": "deny-storage-https-disabled",
+        "policyDefinitionId": "{{DEFINITION_SCOPE}}/providers/Microsoft.Authorization/policyDefinitions/deny-storage-https-disabled",
+        "parameters": {
+          "effect": {
+            "value": "[parameters('effectStorageSecureTransfer')]"
+          }
+        }
+      },
+      {
+        "policyDefinitionReferenceId": "deny-storage-minimum-tls",
+        "policyDefinitionId": "{{DEFINITION_SCOPE}}/providers/Microsoft.Authorization/policyDefinitions/deny-storage-minimum-tls",
+        "parameters": {
+          "effect": {
+            "value": "[parameters('effectStorageMinimumTls')]"
+          },
+          "minimumTlsVersion": {
+            "value": "[parameters('minimumTlsVersion')]"
+          }
+        }
+      },
+      {
+        "policyDefinitionReferenceId": "deny-storage-public-blob-access",
+        "policyDefinitionId": "{{DEFINITION_SCOPE}}/providers/Microsoft.Authorization/policyDefinitions/deny-storage-public-blob-access",
+        "parameters": {
+          "effect": {
+            "value": "[parameters('effectStoragePublicBlobAccess')]"
+          }
+        }
+      },
+      {
+        "policyDefinitionReferenceId": "deny-nsg-open-management-ports",
+        "policyDefinitionId": "{{DEFINITION_SCOPE}}/providers/Microsoft.Authorization/policyDefinitions/deny-nsg-open-management-ports",
+        "parameters": {
+          "effect": {
+            "value": "[parameters('effectNsgOpenManagementPorts')]"
+          },
+          "ports": {
+            "value": "[parameters('blockedInboundPorts')]"
+          }
+        }
+      },
+      {
+        "policyDefinitionReferenceId": "deny-nic-public-ip",
+        "policyDefinitionId": "{{DEFINITION_SCOPE}}/providers/Microsoft.Authorization/policyDefinitions/deny-nic-public-ip",
+        "parameters": {
+          "effect": {
+            "value": "[parameters('effectNicPublicIp')]"
+          }
+        }
+      },
+      {
+        "policyDefinitionReferenceId": "deny-sql-public-network-access",
+        "policyDefinitionId": "{{DEFINITION_SCOPE}}/providers/Microsoft.Authorization/policyDefinitions/deny-sql-public-network-access",
+        "parameters": {
+          "effect": {
+            "value": "[parameters('effectSqlPublicNetworkAccess')]"
+          }
+        }
+      },
+      {
+        "policyDefinitionReferenceId": "deny-keyvault-purge-protection-disabled",
+        "policyDefinitionId": "{{DEFINITION_SCOPE}}/providers/Microsoft.Authorization/policyDefinitions/deny-keyvault-purge-protection-disabled",
+        "parameters": {
+          "effect": {
+            "value": "[parameters('effectKeyVaultPurgeProtection')]"
+          }
+        }
+      },
+      {
+        "policyDefinitionReferenceId": "require-tag-on-resource-groups",
+        "policyDefinitionId": "{{DEFINITION_SCOPE}}/providers/Microsoft.Authorization/policyDefinitions/require-tag-on-resource-groups",
+        "parameters": {
+          "effect": {
+            "value": "[parameters('effectRequireTagOnResourceGroups')]"
+          },
+          "tagName": {
+            "value": "[parameters('requiredTagName')]"
+          }
+        }
+      },
+      {
+        "policyDefinitionReferenceId": "inherit-tag-from-resource-group",
+        "policyDefinitionId": "{{DEFINITION_SCOPE}}/providers/Microsoft.Authorization/policyDefinitions/inherit-tag-from-resource-group",
+        "parameters": {
+          "effect": {
+            "value": "[parameters('effectInheritTagFromResourceGroup')]"
+          },
+          "tagName": {
+            "value": "[parameters('requiredTagName')]"
+          }
+        }
+      },
+      {
+        "policyDefinitionReferenceId": "allowed-locations",
+        "policyDefinitionId": "{{DEFINITION_SCOPE}}/providers/Microsoft.Authorization/policyDefinitions/allowed-locations",
+        "parameters": {
+          "effect": {
+            "value": "[parameters('effectAllowedLocations')]"
+          },
+          "listOfAllowedLocations": {
+            "value": "[parameters('allowedLocations')]"
+          }
+        }
+      },
+      {
+        "policyDefinitionReferenceId": "allowed-vm-skus",
+        "policyDefinitionId": "{{DEFINITION_SCOPE}}/providers/Microsoft.Authorization/policyDefinitions/allowed-vm-skus",
+        "parameters": {
+          "effect": {
+            "value": "[parameters('effectAllowedVmSkus')]"
+          },
+          "listOfAllowedSKUs": {
+            "value": "[parameters('allowedVmSkus')]"
+          }
+        }
+      },
+      {
+        "policyDefinitionReferenceId": "audit-vm-backup-protection",
+        "policyDefinitionId": "{{DEFINITION_SCOPE}}/providers/Microsoft.Authorization/policyDefinitions/audit-vm-backup-protection",
+        "parameters": {
+          "effect": {
+            "value": "[parameters('effectVmBackup')]"
+          }
+        }
+      },
+      {
+        "policyDefinitionReferenceId": "deny-vm-unmanaged-disks",
+        "policyDefinitionId": "{{DEFINITION_SCOPE}}/providers/Microsoft.Authorization/policyDefinitions/deny-vm-unmanaged-disks",
+        "parameters": {
+          "effect": {
+            "value": "[parameters('effectVmManagedDisks')]"
+          }
+        }
+      },
+      {
+        "policyDefinitionReferenceId": "deploy-keyvault-diagnostics",
+        "policyDefinitionId": "{{DEFINITION_SCOPE}}/providers/Microsoft.Authorization/policyDefinitions/deploy-keyvault-diagnostics",
+        "parameters": {
+          "effect": {
+            "value": "[parameters('effectKeyVaultDiagnostics')]"
+          },
+          "logAnalytics": {
+            "value": "[parameters('logAnalyticsWorkspaceId')]"
+          },
+          "profileName": {
+            "value": "[parameters('diagnosticsProfileName')]"
+          }
+        }
+      },
+      {
+        "policyDefinitionReferenceId": "audit-vm-system-assigned-identity",
+        "policyDefinitionId": "{{DEFINITION_SCOPE}}/providers/Microsoft.Authorization/policyDefinitions/audit-vm-system-assigned-identity",
+        "parameters": {
+          "effect": {
+            "value": "[parameters('effectVmSystemAssignedIdentity')]"
+          }
+        }
+      }
+    ]
+  }
+}

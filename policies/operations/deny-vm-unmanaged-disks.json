@@ -1,0 +1,69 @@
+{
+  "name": "deny-vm-unmanaged-disks",
+  "properties": {
+    "displayName": "[Baseline] Virtual machines should use managed disks",
+    "policyType": "Custom",
+    "mode": "All",
+    "description": "Denies virtual machines and scale sets that use unmanaged (storage-account-backed VHD) disks. Managed disks provide per-disk encryption controls, availability guarantees, RBAC, snapshots, and backup integration; unmanaged disks are a legacy pattern with none of those and complicate storage-account governance.",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Operations"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect",
+          "description": "The effect the policy applies when a VM or scale set uses unmanaged disks."
+        },
+        "allowedValues": [
+          "Audit",
+          "Deny",
+          "Disabled"
+        ],
+        "defaultValue": "Deny"
+      }
+    },
+    "policyRule": {
+      "if": {
+        "anyOf": [
+          {
+            "allOf": [
+              {
+                "field": "type",
+                "equals": "Microsoft.Compute/virtualMachines"
+              },
+              {
+                "field": "Microsoft.Compute/virtualMachines/osDisk.uri",
+                "exists": "true"
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "field": "type",
+                "equals": "Microsoft.Compute/virtualMachineScaleSets"
+              },
+              {
+                "anyOf": [
+                  {
+                    "field": "Microsoft.Compute/virtualMachineScaleSets/osDisk.vhdContainers",
+                    "exists": "true"
+                  },
+                  {
+                    "field": "Microsoft.Compute/virtualMachineScaleSets/osDisk.imageUrl",
+                    "exists": "true"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]"
+      }
+    }
+  }
+}

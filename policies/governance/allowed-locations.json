@@ -1,0 +1,57 @@
+{
+  "name": "allowed-locations",
+  "properties": {
+    "displayName": "[Baseline] Resources may only be deployed to approved regions",
+    "policyType": "Custom",
+    "mode": "Indexed",
+    "description": "Denies resources deployed outside the approved region list. Region control is the foundation for data-residency compliance, predictable latency, and cost governance. Global resources and Azure AD B2C directories are exempt because they have no meaningful region.",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Governance"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect",
+          "description": "The effect the policy applies when a resource targets an unapproved region."
+        },
+        "allowedValues": [
+          "Audit",
+          "Deny",
+          "Disabled"
+        ],
+        "defaultValue": "Deny"
+      },
+      "listOfAllowedLocations": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Allowed locations",
+          "description": "Regions where resources may be deployed.",
+          "strongType": "location"
+        }
+      }
+    },
+    "policyRule": {
+      "if": {
+        "allOf": [
+          {
+            "field": "location",
+            "notIn": "[parameters('listOfAllowedLocations')]"
+          },
+          {
+            "field": "location",
+            "notEquals": "global"
+          },
+          {
+            "field": "type",
+            "notEquals": "Microsoft.AzureActiveDirectory/b2cDirectories"
+          }
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]"
+      }
+    }
+  }
+}

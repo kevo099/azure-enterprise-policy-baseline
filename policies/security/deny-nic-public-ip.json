@@ -1,0 +1,51 @@
+{
+  "name": "deny-nic-public-ip",
+  "properties": {
+    "displayName": "[Baseline] Network interfaces should not have public IP addresses",
+    "policyType": "Custom",
+    "mode": "Indexed",
+    "description": "Denies network interfaces that attach a public IP address to any of their IP configurations. Workloads should be reached through a load balancer, Application Gateway, Front Door, or Bastion rather than per-VM public IPs, which bypass centralized ingress controls and are a common lateral-entry point.",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Security"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect",
+          "description": "The effect the policy applies when a network interface has a public IP address attached."
+        },
+        "allowedValues": [
+          "Audit",
+          "Deny",
+          "Disabled"
+        ],
+        "defaultValue": "Deny"
+      }
+    },
+    "policyRule": {
+      "if": {
+        "allOf": [
+          {
+            "field": "type",
+            "equals": "Microsoft.Network/networkInterfaces"
+          },
+          {
+            "count": {
+              "field": "Microsoft.Network/networkInterfaces/ipConfigurations[*]",
+              "where": {
+                "field": "Microsoft.Network/networkInterfaces/ipConfigurations[*].publicIpAddress.id",
+                "like": "*"
+              }
+            },
+            "greater": 0
+          }
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]"
+      }
+    }
+  }
+}

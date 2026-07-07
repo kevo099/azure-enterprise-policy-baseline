@@ -1,0 +1,61 @@
+{
+  "name": "deny-storage-https-disabled",
+  "properties": {
+    "displayName": "[Baseline] Storage accounts should only accept secure transfer (HTTPS)",
+    "policyType": "Custom",
+    "mode": "Indexed",
+    "description": "Denies creation or update of storage accounts that do not enforce HTTPS-only traffic. Secure transfer protects data in transit from interception and man-in-the-middle attacks. API versions from 2019-04-01 onward default this to enabled, so the rule only flags accounts that omit the property on older API versions or set it to false explicitly.",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Security"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect",
+          "description": "The effect the policy applies when a storage account does not enforce HTTPS-only traffic."
+        },
+        "allowedValues": [
+          "Audit",
+          "Deny",
+          "Disabled"
+        ],
+        "defaultValue": "Deny"
+      }
+    },
+    "policyRule": {
+      "if": {
+        "allOf": [
+          {
+            "field": "type",
+            "equals": "Microsoft.Storage/storageAccounts"
+          },
+          {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "value": "[requestContext().apiVersion]",
+                    "less": "2019-04-01"
+                  },
+                  {
+                    "field": "Microsoft.Storage/storageAccounts/supportsHttpsTrafficOnly",
+                    "exists": "false"
+                  }
+                ]
+              },
+              {
+                "field": "Microsoft.Storage/storageAccounts/supportsHttpsTrafficOnly",
+                "equals": "false"
+              }
+            ]
+          }
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]"
+      }
+    }
+  }
+}

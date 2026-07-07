@@ -1,0 +1,53 @@
+{
+  "name": "deny-keyvault-purge-protection-disabled",
+  "properties": {
+    "displayName": "[Baseline] Key vaults should have purge protection enabled",
+    "policyType": "Custom",
+    "mode": "Indexed",
+    "description": "Denies key vaults that do not enable purge protection. Purge protection prevents a soft-deleted vault or secret from being permanently purged before its retention period expires, which is the safeguard against a malicious or accidental insider destroying keys that encrypt production data. Vaults that omit the property are flagged because the platform default leaves purge protection off.",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Security"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect",
+          "description": "The effect the policy applies when a key vault lacks purge protection."
+        },
+        "allowedValues": [
+          "Audit",
+          "Deny",
+          "Disabled"
+        ],
+        "defaultValue": "Deny"
+      }
+    },
+    "policyRule": {
+      "if": {
+        "allOf": [
+          {
+            "field": "type",
+            "equals": "Microsoft.KeyVault/vaults"
+          },
+          {
+            "anyOf": [
+              {
+                "field": "Microsoft.KeyVault/vaults/enablePurgeProtection",
+                "exists": "false"
+              },
+              {
+                "field": "Microsoft.KeyVault/vaults/enablePurgeProtection",
+                "equals": "false"
+              }
+            ]
+          }
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]"
+      }
+    }
+  }
+}

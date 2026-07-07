@@ -1,0 +1,65 @@
+{
+  "name": "deny-storage-minimum-tls",
+  "properties": {
+    "displayName": "[Baseline] Storage accounts should enforce a minimum TLS version",
+    "policyType": "Custom",
+    "mode": "Indexed",
+    "description": "Denies storage accounts whose minimum TLS version is below the required floor (default TLS 1.2). Accounts that omit the property are flagged because their effective floor is TLS 1.0. The comparison is lexicographic, so a future TLS1_3 value stays compliant against a TLS1_2 floor.",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Security"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect",
+          "description": "The effect the policy applies when a storage account's minimum TLS version is below the required floor."
+        },
+        "allowedValues": [
+          "Audit",
+          "Deny",
+          "Disabled"
+        ],
+        "defaultValue": "Deny"
+      },
+      "minimumTlsVersion": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Minimum TLS version",
+          "description": "The lowest TLS version a storage account may advertise as its minimum."
+        },
+        "allowedValues": [
+          "TLS1_1",
+          "TLS1_2"
+        ],
+        "defaultValue": "TLS1_2"
+      }
+    },
+    "policyRule": {
+      "if": {
+        "allOf": [
+          {
+            "field": "type",
+            "equals": "Microsoft.Storage/storageAccounts"
+          },
+          {
+            "anyOf": [
+              {
+                "field": "Microsoft.Storage/storageAccounts/minimumTlsVersion",
+                "exists": "false"
+              },
+              {
+                "field": "Microsoft.Storage/storageAccounts/minimumTlsVersion",
+                "less": "[parameters('minimumTlsVersion')]"
+              }
+            ]
+          }
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]"
+      }
+    }
+  }
+}

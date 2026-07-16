@@ -6,7 +6,7 @@
     "mode": "Indexed",
     "description": "Denies storage accounts whose minimum TLS version is below the required floor (default TLS 1.2). Accounts that omit the property are flagged because their effective floor is TLS 1.0. The comparison is lexicographic, so a future TLS1_3 value stays compliant against a TLS1_2 floor.",
     "metadata": {
-      "version": "1.0.0",
+      "version": "2.0.0",
       "category": "Security"
     },
     "parameters": {
@@ -30,7 +30,6 @@
           "description": "The lowest TLS version a storage account may advertise as its minimum."
         },
         "allowedValues": [
-          "TLS1_1",
           "TLS1_2"
         ],
         "defaultValue": "TLS1_2"

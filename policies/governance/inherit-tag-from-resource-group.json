@@ -4,9 +4,9 @@
     "displayName": "[Baseline] Resources inherit the required tag from their resource group",
     "policyType": "Custom",
     "mode": "Indexed",
-    "description": "Adds the required tag (default: CostCenter) to any resource that is created or updated without it, copying the value from the parent resource group. Combined with the resource-group tag requirement this gives full cost-attribution coverage with zero per-deployment effort. Existing untagged resources can be brought into compliance with a remediation task.",
+    "description": "Adds or replaces the required tag (default: CostCenter) on any resource that is created or updated without a usable value, copying the value from the parent resource group. Combined with the resource-group tag requirement this gives full cost-attribution coverage with zero per-deployment effort. Existing untagged resources can be brought into compliance with a remediation task; non-empty resource-level overrides are preserved.",
     "metadata": {
-      "version": "1.0.0",
+      "version": "2.0.0",
       "category": "Governance"
     },
     "parameters": {
@@ -35,8 +35,16 @@
       "if": {
         "allOf": [
           {
-            "field": "[concat('tags[', parameters('tagName'), ']')]",
-            "exists": "false"
+            "anyOf": [
+              {
+                "field": "[concat('tags[', parameters('tagName'), ']')]",
+                "exists": "false"
+              },
+              {
+                "field": "[concat('tags[', parameters('tagName'), ']')]",
+                "equals": ""
+              }
+            ]
           },
           {
             "value": "[resourceGroup().tags[parameters('tagName')]]",
@@ -52,7 +60,7 @@
           ],
           "operations": [
             {
-              "operation": "add",
+              "operation": "addOrReplace",
               "field": "[concat('tags[', parameters('tagName'), ']')]",
               "value": "[resourceGroup().tags[parameters('tagName')]]"
             }

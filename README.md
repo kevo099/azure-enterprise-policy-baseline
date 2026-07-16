@@ -9,8 +9,9 @@ Adoption Framework governance disciplines — re-implemented as clean,
 consistently parameterized custom definitions you own, can read end-to-end,
 and can extend.
 
-Everything deploys with two shell scripts (`az` + `jq` are the only
-dependencies), and a stdlib-only Python validator keeps the JSON honest in CI.
+Everything deploys and tears down with small shell scripts (`az` + `jq` are
+the only dependencies), and a stdlib-only Python validator keeps the JSON
+honest in CI.
 
 > This is a community project. It is not affiliated with or endorsed by
 > Microsoft.
@@ -26,13 +27,13 @@ dependencies), and a stdlib-only Python validator keeps the JSON honest in CI.
 | 5 | `deny-nic-public-ip` | Security | Deny | Network interfaces must not attach public IP addresses |
 | 6 | `deny-sql-public-network-access` | Security | Deny | SQL logical servers must disable public network access |
 | 7 | `deny-keyvault-purge-protection-disabled` | Security | Deny | Key vaults must enable purge protection |
-| 8 | `require-tag-on-resource-groups` | Governance | Deny | Resource groups must carry the required tag (default `CostCenter`) |
-| 9 | `inherit-tag-from-resource-group` | Governance | Modify | Resources automatically inherit that tag from their resource group |
+| 8 | `require-tag-on-resource-groups` | Governance | Deny | Resource groups must carry a non-empty required tag (default `CostCenter`) |
+| 9 | `inherit-tag-from-resource-group` | Governance | Modify | Missing or empty resource tags inherit the value from their resource group |
 | 10 | `allowed-locations` | Governance | Deny | Resources may only deploy to approved regions |
 | 11 | `allowed-vm-skus` | Governance | Deny | VMs may only use approved sizes |
 | 12 | `audit-vm-backup-protection` | Operations | AuditIfNotExists | Flags VMs not protected by Azure Backup |
 | 13 | `deny-vm-unmanaged-disks` | Operations | Deny | VMs and scale sets must use managed disks |
-| 14 | `deploy-keyvault-diagnostics` | Operations | DeployIfNotExists | Auto-deploys key vault audit logging to Log Analytics |
+| 14 | `deploy-keyvault-diagnostics` | Operations | DeployIfNotExists | Auto-deploys key vault audit logging and metrics to Log Analytics |
 | 15 | `audit-vm-system-assigned-identity` | Identity | Audit | Flags VMs without a system-assigned managed identity |
 
 The `enterprise-baseline` initiative includes all fifteen and surfaces every
@@ -49,7 +50,7 @@ policies/            One JSON file per policy definition, grouped by category
   operations/        3 policies for backup, managed disks, diagnostics
   identity/          1 policy for managed identity adoption
 initiatives/         enterprise-baseline.json (policy set definition)
-scripts/             deploy.sh, assign.sh, validate.py
+scripts/             Deploy, assign, unassign, undeploy, and validation tools
 examples/            Starter assignment parameter values
 docs/DESIGN.md       Design decisions, sources, known limitations, rollout SOP
 .github/workflows/   CI: structural validation on every push and PR
@@ -77,9 +78,12 @@ $EDITOR my-params.json   # allowed regions/SKUs, Log Analytics workspace, tag na
 ```
 
 `assign.sh` creates the assignment with a system-assigned managed identity and
-grants it the roles the Modify/DeployIfNotExists policies need (Contributor,
-Monitoring Contributor, Log Analytics Contributor). `my-params.json` is
-gitignored so real subscription IDs stay out of the repo.
+grants it the roles the Modify/DeployIfNotExists policies need. Contributor and
+Monitoring Contributor are scoped to the assignment; Log Analytics Contributor
+is scoped to the selected workspace, even when that workspace is in another
+resource group. The script is idempotent and exits nonzero if any required role
+grant fails. `my-params.json` is gitignored so real subscription IDs stay out of
+the repo.
 
 ### Recommended rollout
 
@@ -102,6 +106,26 @@ gitignored so real subscription IDs stay out of the repo.
 
 Exemptions for legitimate exceptions (that one NVA that genuinely needs a
 public IP) belong in `az policy exemption create` — not in weakened policy.
+
+### Clean removal
+
+Remove assignments before definitions so the managed identity's RBAC grants
+do not become orphaned:
+
+```bash
+./scripts/unassign.sh --name enterprise-baseline --scope /subscriptions/<id>
+./scripts/undeploy.sh --subscription <id>
+```
+
+Resource-group assignments use the full RG resource ID as `--scope`. These
+commands remove policy and RBAC objects; application resources remain under
+your normal lifecycle tooling.
+
+## Live validation
+
+The full baseline was server-validated and exercised in a disposable Azure
+subscription on 2026-07-16. The test matrix, platform caveats, fixes found, and
+cleanup assertions are recorded in [docs/LIVE-TEST-2026-07-16.md](docs/LIVE-TEST-2026-07-16.md).
 
 ## Validating changes
 

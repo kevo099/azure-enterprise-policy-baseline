@@ -4,7 +4,7 @@
     "displayName": "[Baseline] Enterprise governance baseline",
     "description": "Bundles the fifteen enterprise baseline policies (security, governance, operations, identity) into a single assignable initiative. Every policy's effect is surfaced as an initiative parameter so the whole baseline can be flipped between Audit and Deny per policy during rollout without editing definitions.",
     "metadata": {
-      "version": "1.0.0",
+      "version": "2.0.0",
       "category": "Governance"
     },
     "parameters": {
@@ -41,7 +41,6 @@
           "description": "The lowest TLS version a storage account may advertise as its minimum."
         },
         "allowedValues": [
-          "TLS1_1",
           "TLS1_2"
         ],
         "defaultValue": "TLS1_2"
@@ -240,7 +239,8 @@
         "metadata": {
           "displayName": "Log Analytics workspace",
           "description": "Full resource ID of the Log Analytics workspace that receives key vault audit logs.",
-          "strongType": "omsWorkspace"
+          "strongType": "omsWorkspace",
+          "assignPermissions": true
         }
       },
       "diagnosticsProfileName": {

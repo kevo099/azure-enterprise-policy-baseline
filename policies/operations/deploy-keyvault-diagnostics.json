@@ -6,7 +6,7 @@
     "mode": "Indexed",
     "description": "Deploys a diagnostic setting on every key vault that streams the audit log category group and all metrics to the central Log Analytics workspace. Key vault access logs are the forensic record of who touched which secret and when; deploying them by policy guarantees no vault ships without an audit trail. Existing vaults are covered via a remediation task.",
     "metadata": {
-      "version": "1.0.0",
+      "version": "2.0.0",
       "category": "Operations"
     },
     "parameters": {
@@ -28,7 +28,8 @@
         "metadata": {
           "displayName": "Log Analytics workspace",
           "description": "Full resource ID of the Log Analytics workspace that receives key vault audit logs.",
-          "strongType": "omsWorkspace"
+          "strongType": "omsWorkspace",
+          "assignPermissions": true
         }
       },
       "profileName": {
@@ -49,6 +50,7 @@
         "effect": "[parameters('effect')]",
         "details": {
           "type": "Microsoft.Insights/diagnosticSettings",
+          "evaluationDelay": "AfterProvisioning",
           "roleDefinitionIds": [
             "/providers/microsoft.authorization/roleDefinitions/749f88d5-cbae-40b8-bcfc-e573ddc772fa",
             "/providers/microsoft.authorization/roleDefinitions/92aaf0da-9dab-42b6-94a3-d43ce8d16293"
@@ -74,6 +76,24 @@
                 "greaterOrEquals": 1
               },
               {
+                "count": {
+                  "field": "Microsoft.Insights/diagnosticSettings/metrics[*]",
+                  "where": {
+                    "allOf": [
+                      {
+                        "field": "Microsoft.Insights/diagnosticSettings/metrics[*].enabled",
+                        "equals": "true"
+                      },
+                      {
+                        "field": "Microsoft.Insights/diagnosticSettings/metrics[*].category",
+                        "equals": "AllMetrics"
+                      }
+                    ]
+                  }
+                },
+                "greaterOrEquals": 1
+              },
+              {
                 "field": "Microsoft.Insights/diagnosticSettings/workspaceId",
                 "equals": "[parameters('logAnalytics')]"
               }
@@ -92,9 +112,6 @@
                   "logAnalytics": {
                     "type": "string"
                   },
-                  "location": {
-                    "type": "string"
-                  },
                   "profileName": {
                     "type": "string"
                   }
@@ -105,7 +122,6 @@
                     "type": "Microsoft.KeyVault/vaults/providers/diagnosticSettings",
                     "apiVersion": "2021-05-01-preview",
                     "name": "[concat(parameters('resourceName'), '/', 'Microsoft.Insights/', parameters('profileName'))]",
-                    "location": "[parameters('location')]",
                     "dependsOn": [],
                     "properties": {
                       "workspaceId": "[parameters('logAnalytics')]",
@@ -129,9 +145,6 @@
               "parameters": {
                 "logAnalytics": {
                   "value": "[parameters('logAnalytics')]"
-                },
-                "location": {
-                  "value": "[field('location')]"
                 },
                 "resourceName": {
                   "value": "[field('name')]"

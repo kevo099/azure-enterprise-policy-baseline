@@ -49,10 +49,22 @@ if [[ -z "$PARAMS_FILE" || ! -f "$PARAMS_FILE" ]]; then
 fi
 
 command -v az >/dev/null || { echo "az CLI is required" >&2; exit 1; }
+command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
 
 [[ -z "$SCOPE" ]] && SCOPE="/subscriptions/$(az account show --query id -o tsv)"
-[[ -z "$DEFINITION_SCOPE" ]] && DEFINITION_SCOPE="/subscriptions/$(az account show --query id -o tsv)"
+if [[ -z "$DEFINITION_SCOPE" ]]; then
+  if [[ "$SCOPE" =~ ^/subscriptions/([^/]+)(/|$) ]]; then
+    DEFINITION_SCOPE="/subscriptions/${BASH_REMATCH[1]}"
+  else
+    DEFINITION_SCOPE="/subscriptions/$(az account show --query id -o tsv)"
+  fi
+fi
 SET_DEF_ID="$DEFINITION_SCOPE/providers/Microsoft.Authorization/policySetDefinitions/enterprise-baseline"
+LOG_ANALYTICS_SCOPE="$(jq -r '.logAnalyticsWorkspaceId.value // empty' "$PARAMS_FILE")"
+if [[ -z "$LOG_ANALYTICS_SCOPE" ]]; then
+  echo "params file must set logAnalyticsWorkspaceId.value" >&2
+  exit 1
+fi
 
 echo "==> Assigning '$NAME' at $SCOPE (enforcement: $ENFORCE)"
 az policy assignment create \
@@ -71,37 +83,68 @@ principal="$(az policy assignment show --name "$NAME" --scope "$SCOPE" \
 echo "==> Granting remediation roles to assignment identity $principal"
 
 # Contributor covers the tag Modify operations; the two monitoring roles cover
-# the diagnostic-settings DeployIfNotExists. New identities can take a moment
-# to propagate through Entra ID, hence the retry loop.
-for role in "Contributor" "Monitoring Contributor" "Log Analytics Contributor"; do
+# the diagnostic-settings DeployIfNotExists. Log Analytics permissions belong
+# on the workspace itself, which can be outside the policy assignment scope.
+# New identities can take a moment to propagate through Entra ID, hence the
+# retry loop. Existing grants make the script safely idempotent.
+roles=("Contributor" "Monitoring Contributor" "Log Analytics Contributor")
+role_scopes=("$SCOPE" "$SCOPE" "$LOG_ANALYTICS_SCOPE")
+grant_failures=0
+for index in "${!roles[@]}"; do
+  role="${roles[$index]}"
+  role_scope="${role_scopes[$index]}"
   granted=false
+  effective_scope=""
   for attempt in 1 2 3 4 5; do
+    existing_scope="$(az role assignment list \
+      --assignee-object-id "$principal" \
+      --scope "$role_scope" \
+      --include-inherited \
+      --query "[?roleDefinitionName=='$role'] | [0].scope" \
+      -o tsv 2>/dev/null || true)"
+    if [[ -n "$existing_scope" ]]; then
+      granted=true
+      effective_scope="$existing_scope"
+      break
+    fi
     if az role assignment create \
          --assignee-object-id "$principal" \
          --assignee-principal-type ServicePrincipal \
          --role "$role" \
-         --scope "$SCOPE" \
+         --scope "$role_scope" \
          --output none 2>/dev/null; then
       granted=true
+      effective_scope="$role_scope"
       break
     fi
     sleep 15
   done
   if [[ "$granted" == true ]]; then
-    echo "    - $role"
+    echo "    - $role effective at $effective_scope"
   else
-    echo "    ! failed to grant '$role' — grant it manually before remediating" >&2
+    echo "    ! failed to grant '$role' at '$role_scope'" >&2
+    grant_failures=$((grant_failures + 1))
   fi
 done
+
+if [[ "$grant_failures" -gt 0 ]]; then
+  echo "Assignment exists, but $grant_failures required remediation role grant(s) failed." >&2
+  exit 1
+fi
+
+scope_hint=""
+if [[ "$SCOPE" =~ /resourceGroups/([^/]+)$ ]]; then
+  scope_hint="--resource-group '${BASH_REMATCH[1]}'"
+fi
 
 cat <<EOF
 ==> Assigned. Useful follow-ups:
     Trigger an evaluation now:
-      az policy state trigger-scan --no-wait
+      az policy state trigger-scan ${scope_hint:+$scope_hint }--no-wait
     Review compliance:
-      az policy state summarize --policy-assignment "$NAME"
+      az policy state summarize ${scope_hint:+$scope_hint }--policy-assignment "$NAME"
     Remediate existing resources (tags example):
-      az policy remediation create --name inherit-tags \\
+      az policy remediation create ${scope_hint:+$scope_hint }--name inherit-tags \\
         --policy-assignment "$NAME" \\
         --definition-reference-id inherit-tag-from-resource-group
 EOF

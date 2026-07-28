@@ -66,6 +66,18 @@ if [[ -z "$LOG_ANALYTICS_SCOPE" ]]; then
   exit 1
 fi
 
+# Capture the existing assignment's identity and workspace before updating it.
+# If the workspace changes, the old least-scope role grant must be removed after
+# the new grant succeeds; otherwise repeated reconfiguration leaves orphan RBAC.
+previous_principal=""
+previous_log_analytics_scope=""
+if az policy assignment show --name "$NAME" --scope "$SCOPE" --output none 2>/dev/null; then
+  previous_principal="$(az policy assignment show --name "$NAME" --scope "$SCOPE" \
+    --query identity.principalId -o tsv)"
+  previous_log_analytics_scope="$(az policy assignment show --name "$NAME" --scope "$SCOPE" \
+    --query parameters.logAnalyticsWorkspaceId.value -o tsv)"
+fi
+
 echo "==> Assigning '$NAME' at $SCOPE (enforcement: $ENFORCE)"
 az policy assignment create \
   --name "$NAME" \
@@ -129,6 +141,55 @@ done
 
 if [[ "$grant_failures" -gt 0 ]]; then
   echo "Assignment exists, but $grant_failures required remediation role grant(s) failed." >&2
+  exit 1
+fi
+
+cleanup_failures=0
+delete_previous_grants() {
+  local assignee="$1"
+  local role="$2"
+  local role_scope="$3"
+  local ids_output=""
+  local ids=()
+
+  [[ -z "$assignee" || -z "$role_scope" ]] && return 0
+  if ! ids_output="$(az role assignment list \
+      --assignee-object-id "$assignee" \
+      --scope "$role_scope" \
+      --query "[?roleDefinitionName=='$role'].id" \
+      -o tsv)"; then
+    echo "    ! failed to list stale '$role' grants at '$role_scope'" >&2
+    cleanup_failures=$((cleanup_failures + 1))
+    return
+  fi
+  mapfile -t ids <<<"$ids_output"
+  for id in "${ids[@]}"; do
+    [[ -z "$id" ]] && continue
+    if az role assignment delete --ids "$id" --output none; then
+      echo "    - removed stale $role at $role_scope"
+    else
+      echo "    ! failed to remove stale '$role' at '$role_scope'" >&2
+      cleanup_failures=$((cleanup_failures + 1))
+    fi
+  done
+}
+
+# A system-assigned principal is normally preserved by an in-place assignment
+# update. Handle identity replacement defensively, and always remove the old
+# workspace grant when either the principal or workspace changed.
+if [[ -n "$previous_principal" && "$previous_principal" != "$principal" ]]; then
+  delete_previous_grants "$previous_principal" "Contributor" "$SCOPE"
+  delete_previous_grants "$previous_principal" "Monitoring Contributor" "$SCOPE"
+fi
+if [[ -n "$previous_log_analytics_scope" ]] &&
+   [[ "$previous_principal" != "$principal" ||
+      "$previous_log_analytics_scope" != "$LOG_ANALYTICS_SCOPE" ]]; then
+  delete_previous_grants "$previous_principal" "Log Analytics Contributor" \
+    "$previous_log_analytics_scope"
+fi
+
+if [[ "$cleanup_failures" -gt 0 ]]; then
+  echo "Assignment updated, but $cleanup_failures stale remediation role cleanup(s) failed." >&2
   exit 1
 fi
 

@@ -66,16 +66,28 @@ if [[ -z "$LOG_ANALYTICS_SCOPE" ]]; then
   exit 1
 fi
 
-# Capture the existing assignment's identity and workspace before updating it.
-# If the workspace changes, the old least-scope role grant must be removed after
-# the new grant succeeds; otherwise repeated reconfiguration leaves orphan RBAC.
+# Capture the existing assignment in one request before updating it. A failed
+# preflight must not be treated as "not found", because that would lose the old
+# workspace scope needed for RBAC cleanup.
+previous_assignment_exists=false
 previous_principal=""
 previous_log_analytics_scope=""
-if az policy assignment show --name "$NAME" --scope "$SCOPE" --output none 2>/dev/null; then
-  previous_principal="$(az policy assignment show --name "$NAME" --scope "$SCOPE" \
-    --query identity.principalId -o tsv)"
-  previous_log_analytics_scope="$(az policy assignment show --name "$NAME" --scope "$SCOPE" \
-    --query parameters.logAnalyticsWorkspaceId.value -o tsv)"
+previous_assignment_json=""
+if previous_assignment_json="$(az policy assignment show \
+    --name "$NAME" --scope "$SCOPE" --only-show-errors -o json 2>&1)"; then
+  previous_assignment_exists=true
+  previous_principal="$(jq -r '.identity.principalId // empty' \
+    <<<"$previous_assignment_json")"
+  previous_log_analytics_scope="$(jq -r \
+    '.parameters.logAnalyticsWorkspaceId.value // empty' \
+    <<<"$previous_assignment_json")"
+else
+  previous_status=$?
+  if [[ "$previous_status" -ne 3 ]]; then
+    echo "Failed to inspect existing assignment '$NAME' at '$SCOPE':" >&2
+    echo "$previous_assignment_json" >&2
+    exit "$previous_status"
+  fi
 fi
 
 echo "==> Assigning '$NAME' at $SCOPE (enforcement: $ENFORCE)"
@@ -112,6 +124,7 @@ for index in "${!roles[@]}"; do
       --assignee-object-id "$principal" \
       --scope "$role_scope" \
       --include-inherited \
+      --fill-principal-name false \
       --query "[?roleDefinitionName=='$role'] | [0].scope" \
       -o tsv 2>/dev/null || true)"
     if [[ -n "$existing_scope" ]]; then
@@ -156,9 +169,13 @@ delete_previous_grants() {
   if ! ids_output="$(az role assignment list \
       --assignee-object-id "$assignee" \
       --scope "$role_scope" \
+      --fill-principal-name false \
       --query "[?roleDefinitionName=='$role'].id" \
       -o tsv)"; then
     echo "    ! failed to list stale '$role' grants at '$role_scope'" >&2
+    echo "      retry: az role assignment list --assignee-object-id '$assignee' \\" >&2
+    echo "        --scope '$role_scope' --fill-principal-name false \\" >&2
+    echo "        --query \"[?roleDefinitionName=='$role'].id\" -o tsv" >&2
     cleanup_failures=$((cleanup_failures + 1))
     return
   fi
@@ -169,10 +186,26 @@ delete_previous_grants() {
       echo "    - removed stale $role at $role_scope"
     else
       echo "    ! failed to remove stale '$role' at '$role_scope'" >&2
+      echo "      retry: az role assignment delete --ids '$id'" >&2
       cleanup_failures=$((cleanup_failures + 1))
     fi
   done
 }
+
+normalize_resource_id() {
+  local value="${1%/}"
+  printf '%s' "${value,,}"
+}
+
+normalized_scope="$(normalize_resource_id "$SCOPE")"
+normalized_log_analytics_scope="$(normalize_resource_id "$LOG_ANALYTICS_SCOPE")"
+normalized_previous_log_analytics_scope="$(
+  normalize_resource_id "$previous_log_analytics_scope"
+)"
+workspace_changed=false
+if [[ "$normalized_previous_log_analytics_scope" != "$normalized_log_analytics_scope" ]]; then
+  workspace_changed=true
+fi
 
 # A system-assigned principal is normally preserved by an in-place assignment
 # update. Handle identity replacement defensively, and always remove the old
@@ -181,15 +214,23 @@ if [[ -n "$previous_principal" && "$previous_principal" != "$principal" ]]; then
   delete_previous_grants "$previous_principal" "Contributor" "$SCOPE"
   delete_previous_grants "$previous_principal" "Monitoring Contributor" "$SCOPE"
 fi
+# assign.sh versions before 1.1 placed Log Analytics Contributor at the broad
+# assignment scope. Remove that legacy direct grant once the least-scope
+# workspace grant has succeeded.
+if [[ "$previous_assignment_exists" == true &&
+      -n "$previous_principal" &&
+      "$normalized_scope" != "$normalized_log_analytics_scope" ]]; then
+  delete_previous_grants "$previous_principal" "Log Analytics Contributor" "$SCOPE"
+fi
 if [[ -n "$previous_log_analytics_scope" ]] &&
-   [[ "$previous_principal" != "$principal" ||
-      "$previous_log_analytics_scope" != "$LOG_ANALYTICS_SCOPE" ]]; then
+   [[ "$previous_principal" != "$principal" || "$workspace_changed" == true ]]; then
   delete_previous_grants "$previous_principal" "Log Analytics Contributor" \
     "$previous_log_analytics_scope"
 fi
 
 if [[ "$cleanup_failures" -gt 0 ]]; then
   echo "Assignment updated, but $cleanup_failures stale remediation role cleanup(s) failed." >&2
+  echo "Use the retry command(s) above; a later run cannot infer an older workspace scope." >&2
   exit 1
 fi
 

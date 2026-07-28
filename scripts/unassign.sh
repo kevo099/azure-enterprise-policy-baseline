@@ -26,33 +26,53 @@ while [[ $# -gt 0 ]]; do
 done
 
 command -v az >/dev/null || { echo "az CLI is required" >&2; exit 1; }
+command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
 [[ -z "$SCOPE" ]] && SCOPE="/subscriptions/$(az account show --query id -o tsv)"
 
-if ! az policy assignment show --name "$NAME" --scope "$SCOPE" --output none 2>/dev/null; then
-  echo "==> Assignment '$NAME' does not exist at $SCOPE"
-  exit 0
+assignment_json=""
+if assignment_json="$(az policy assignment show \
+    --name "$NAME" --scope "$SCOPE" --only-show-errors -o json 2>&1)"; then
+  principal="$(jq -r '.identity.principalId // empty' <<<"$assignment_json")"
+  log_analytics_scope="$(jq -r \
+    '.parameters.logAnalyticsWorkspaceId.value // empty' <<<"$assignment_json")"
+else
+  assignment_status=$?
+  if [[ "$assignment_status" -eq 3 ]]; then
+    echo "==> Assignment '$NAME' does not exist at $SCOPE"
+    exit 0
+  fi
+  echo "Failed to inspect assignment '$NAME' at '$SCOPE':" >&2
+  echo "$assignment_json" >&2
+  exit "$assignment_status"
 fi
 
-principal="$(az policy assignment show --name "$NAME" --scope "$SCOPE" \
-  --query identity.principalId -o tsv)"
-log_analytics_scope="$(az policy assignment show --name "$NAME" --scope "$SCOPE" \
-  --query parameters.logAnalyticsWorkspaceId.value -o tsv)"
-
+cleanup_failures=0
 delete_role_grants() {
   local role="$1"
   local role_scope="$2"
+  local ids_output=""
   local ids=()
 
-  [[ -z "$role_scope" ]] && return 0
-  mapfile -t ids < <(az role assignment list \
-    --assignee-object-id "$principal" \
-    --scope "$role_scope" \
-    --query "[?roleDefinitionName=='$role'].id" \
-    -o tsv)
+  [[ -z "$principal" || -z "$role_scope" ]] && return 0
+  if ! ids_output="$(az role assignment list \
+      --assignee-object-id "$principal" \
+      --scope "$role_scope" \
+      --fill-principal-name false \
+      --query "[?roleDefinitionName=='$role'].id" \
+      -o tsv)"; then
+    echo "    ! failed to list '$role' grants at '$role_scope'" >&2
+    cleanup_failures=$((cleanup_failures + 1))
+    return
+  fi
+  mapfile -t ids <<<"$ids_output"
   for id in "${ids[@]}"; do
     [[ -z "$id" ]] && continue
-    az role assignment delete --ids "$id" --output none
-    echo "    - removed $role at $role_scope"
+    if az role assignment delete --ids "$id" --output none; then
+      echo "    - removed $role at $role_scope"
+    else
+      echo "    ! failed to remove '$role' at '$role_scope'" >&2
+      cleanup_failures=$((cleanup_failures + 1))
+    fi
   done
 }
 
@@ -64,6 +84,11 @@ delete_role_grants "Monitoring Contributor" "$SCOPE"
 delete_role_grants "Log Analytics Contributor" "$log_analytics_scope"
 if [[ "$log_analytics_scope" != "$SCOPE" ]]; then
   delete_role_grants "Log Analytics Contributor" "$SCOPE"
+fi
+
+if [[ "$cleanup_failures" -gt 0 ]]; then
+  echo "Refusing to delete assignment: $cleanup_failures RBAC cleanup operation(s) failed." >&2
+  exit 1
 fi
 
 echo "==> Deleting assignment '$NAME' from $SCOPE"

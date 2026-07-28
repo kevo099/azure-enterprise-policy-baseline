@@ -2,9 +2,9 @@
   "name": "enterprise-baseline",
   "properties": {
     "displayName": "[Baseline] Enterprise governance baseline",
-    "description": "Bundles the fifteen enterprise baseline policies (security, governance, operations, identity) into a single assignable initiative. Every policy's effect is surfaced as an initiative parameter so the whole baseline can be flipped between Audit and Deny per policy during rollout without editing definitions.",
+    "description": "Bundles the sixteen enterprise baseline policies (security, governance, operations, identity) into a single assignable initiative. Every policy's effect is surfaced as an initiative parameter so the whole baseline can be flipped between Audit and Deny per policy during rollout without editing definitions.",
     "metadata": {
-      "version": "2.0.0",
+      "version": "2.1.0",
       "category": "Governance"
     },
     "parameters": {
@@ -208,6 +208,18 @@
         ],
         "defaultValue": "AuditIfNotExists"
       },
+      "effectFileShareBackup": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect: file share backup protection",
+          "description": "Effect for the file-share backup-protection policy."
+        },
+        "allowedValues": [
+          "AuditIfNotExists",
+          "Disabled"
+        ],
+        "defaultValue": "AuditIfNotExists"
+      },
       "effectVmManagedDisks": {
         "type": "String",
         "metadata": {
@@ -388,6 +400,15 @@
         "parameters": {
           "effect": {
             "value": "[parameters('effectVmBackup')]"
+          }
+        }
+      },
+      {
+        "policyDefinitionReferenceId": "audit-file-share-backup-protection",
+        "policyDefinitionId": "{{DEFINITION_SCOPE}}/providers/Microsoft.Authorization/policyDefinitions/audit-file-share-backup-protection",
+        "parameters": {
+          "effect": {
+            "value": "[parameters('effectFileShareBackup')]"
           }
         }
       },

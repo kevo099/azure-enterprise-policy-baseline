@@ -13,7 +13,7 @@ usage() {
   cat <<'EOF'
 Usage: deploy.sh [-s <subscription-id>] [-m <management-group-id>]
 
-Creates or updates all 15 policy definitions and the enterprise-baseline
+Creates or updates all 16 policy definitions and the enterprise-baseline
 initiative. With no arguments it targets the CLI's current subscription.
 Deploy to a management group to make the baseline assignable anywhere
 beneath it.

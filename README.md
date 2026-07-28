@@ -1,6 +1,6 @@
 # Azure Enterprise Policy Baseline
 
-A ready-to-deploy set of **15 custom Azure Policy definitions**, bundled into a
+A ready-to-deploy set of **16 custom Azure Policy definitions**, bundled into a
 single **initiative**, that implements the governance guardrails Microsoft
 recommends for enterprise Azure estates. The patterns are drawn from
 Microsoft's own published governance tooling — the Azure Policy built-in
@@ -32,11 +32,12 @@ honest in CI.
 | 10 | `allowed-locations` | Governance | Deny | Resources may only deploy to approved regions |
 | 11 | `allowed-vm-skus` | Governance | Deny | VMs may only use approved sizes |
 | 12 | `audit-vm-backup-protection` | Operations | AuditIfNotExists | Flags VMs not protected by Azure Backup |
-| 13 | `deny-vm-unmanaged-disks` | Operations | Deny | VMs and scale sets must use managed disks |
-| 14 | `deploy-keyvault-diagnostics` | Operations | DeployIfNotExists | Auto-deploys key vault audit logging and metrics to Log Analytics |
-| 15 | `audit-vm-system-assigned-identity` | Identity | Audit | Flags VMs without a system-assigned managed identity |
+| 13 | `audit-file-share-backup-protection` | Operations | AuditIfNotExists | Flags SMB Azure file shares not protected by Azure Backup |
+| 14 | `deny-vm-unmanaged-disks` | Operations | Deny | VMs and scale sets must use managed disks |
+| 15 | `deploy-keyvault-diagnostics` | Operations | DeployIfNotExists | Auto-deploys key vault audit logging and metrics to Log Analytics |
+| 16 | `audit-vm-system-assigned-identity` | Identity | Audit | Flags VMs without a system-assigned managed identity |
 
-The `enterprise-baseline` initiative includes all fifteen and surfaces every
+The `enterprise-baseline` initiative includes all sixteen and surfaces every
 policy's effect as an initiative parameter, so you can run the entire baseline
 in audit mode, harden policy-by-policy, or disable individual policies —
 all from assignment parameters, never by editing definitions.
@@ -47,7 +48,7 @@ all from assignment parameters, never by editing definitions.
 policies/            One JSON file per policy definition, grouped by category
   security/          7 deny policies for data-in-transit, exposure, key protection
   governance/        4 policies for tags, regions, and SKU control
-  operations/        3 policies for backup, managed disks, diagnostics
+  operations/        4 policies for backup, managed disks, diagnostics
   identity/          1 policy for managed identity adoption
 initiatives/         enterprise-baseline.json (policy set definition)
 scripts/             Deploy, assign, unassign, undeploy, and validation tools
@@ -65,7 +66,7 @@ Each policy file is a complete, self-describing definition: `displayName`,
 ```bash
 az login
 
-# 1. Publish the 15 definitions + initiative
+# 1. Publish the 16 definitions + initiative
 #    (current subscription by default, or -m <management-group-id>)
 ./scripts/deploy.sh
 

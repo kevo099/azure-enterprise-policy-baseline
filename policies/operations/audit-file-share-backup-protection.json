@@ -1,0 +1,47 @@
+{
+  "name": "audit-file-share-backup-protection",
+  "properties": {
+    "displayName": "[Baseline] Azure file shares should be protected by Azure Backup",
+    "policyType": "Custom",
+    "mode": "All",
+    "description": "Audits SMB Azure file shares that have no centrally managed Azure Backup protected-item record. A share is compliant when a backup-protected item exists for it in a Recovery Services vault; this is an existence-only check and does not assess backup health, freshness, or recoverability. NFS shares are excluded because Azure Backup does not support them. Pair with Microsoft's built-in DeployIfNotExists file-share backup policies once a vault strategy is settled.",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Operations"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect",
+          "description": "AuditIfNotExists reports SMB file shares without backup protection; Disabled turns the policy off."
+        },
+        "allowedValues": [
+          "AuditIfNotExists",
+          "Disabled"
+        ],
+        "defaultValue": "AuditIfNotExists"
+      }
+    },
+    "policyRule": {
+      "if": {
+        "allOf": [
+          {
+            "field": "type",
+            "equals": "Microsoft.Storage/storageAccounts/fileServices/shares"
+          },
+          {
+            "field": "Microsoft.Storage/storageAccounts/fileServices/shares/enabledProtocols",
+            "equals": "SMB"
+          }
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]",
+        "details": {
+          "type": "Microsoft.RecoveryServices/backupprotecteditems"
+        }
+      }
+    }
+  }
+}

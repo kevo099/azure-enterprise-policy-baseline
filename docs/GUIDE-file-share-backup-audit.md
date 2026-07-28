@@ -7,9 +7,10 @@ the baseline's file-share backup audit policy — standalone or as part of the
 ## What this policy does
 
 `policies/operations/audit-file-share-backup-protection.json` flags every
-**SMB Azure file share** that has no Azure Backup protection. A share is
-compliant when a backup-protected item (`AzureFileShareProtectedItem`) exists
-for it in a **Recovery Services vault**. The policy:
+**SMB Azure file share** that has no centrally managed Azure Backup
+protected-item record. A share is compliant when a backup-protected item
+(`AzureFileShareProtectedItem`) exists for it in a **Recovery Services
+vault**. The policy:
 
 - targets `Microsoft.Storage/storageAccounts/fileServices/shares` (the share
   child resource, so each share gets its own compliance record — a storage
@@ -18,17 +19,27 @@ for it in a **Recovery Services vault**. The policy:
   without tags or location — an `Indexed` policy would never evaluate them;
 - only evaluates shares with `enabledProtocols == SMB`. NFS shares are
   excluded on purpose: Azure Backup does not support NFS Azure file shares,
-  so including them would produce permanent, unfixable non-compliance noise;
+  so including them would produce permanent, unfixable non-compliance noise.
+  Premium (SSD/FileStorage) SMB shares are deliberately **included** — they
+  are supported by Azure Backup;
 - uses `AuditIfNotExists` with `details.type:
   Microsoft.RecoveryServices/backupprotecteditems` and **no
   existenceCondition** — see "How the existence check actually works" below.
+
+**This is an existence-only control.** Compliant means Azure Policy correlated
+the share with an Azure Backup protected-item record — nothing more. It does
+not assess backup health, freshness, retention, recovery-point age, vault
+redundancy, or restore success (protected items in `stopped`, `paused`, or
+`error` states still count). Manual share snapshots and third-party backup
+products do **not** satisfy it; snapshot-tier-only Azure Backup **does**.
 
 ## Relationship to Microsoft's built-in policies
 
 Microsoft ships a built-in audit policy with the same rule:
 **`[Preview]: Azure Backup should be enabled on Azure file shares`**
 (`cfc5190a-3b19-4a23-b563-a4c719b666e4`, `1.0.0-preview`, added Feb 2025).
-This custom policy is its non-preview twin, kept in the baseline so that:
+This custom policy is a custom clone pinned to the built-in's
+`1.0.0-preview` rule JSON, kept in the baseline so that:
 
 - the baseline does not depend on a *preview* definition Microsoft may change
   or withdraw (the built-in is in no built-in initiative and has no
@@ -37,8 +48,10 @@ This custom policy is its non-preview twin, kept in the baseline so that:
   other baseline policy (`effectFileShareBackup`);
 - the definition is versioned and testable in this repo.
 
-If you prefer the built-in, assign `cfc5190a-3b19-4a23-b563-a4c719b666e4`
-instead — the compliance results are identical.
+Pinning the JSON pins only the rule text — the Policy engine's pseudo-type
+correlation behavior stays platform-side either way. If you prefer the
+built-in, assign `cfc5190a-3b19-4a23-b563-a4c719b666e4` instead — the
+compliance results are identical.
 
 To **remediate** (not just audit), pair this policy with Microsoft's built-in
 DeployIfNotExists policies, which enable backup automatically:
@@ -55,12 +68,20 @@ not supported at management-group scope.)
 
 ## Prerequisites
 
-- Azure CLI logged in with rights to create policy definitions and
-  assignments at your target scope (Owner, or Contributor +
-  Resource Policy Contributor).
+- Azure CLI and `jq` (both deployment options below use them).
 - `Microsoft.Storage`, `Microsoft.RecoveryServices`, and
   `Microsoft.PolicyInsights` resource providers registered.
-- `jq` if you use the repo's `scripts/deploy.sh`.
+- Permissions:
+  - **Option B (standalone policy):** rights to create policy definitions and
+    assignments at the target scope — Owner, or Contributor + Resource
+    Policy Contributor. No managed identity or role grants are involved;
+    `AuditIfNotExists` only reads.
+  - **Option A (full baseline):** additionally requires
+    `Microsoft.Authorization/roleAssignments/write` (e.g. Owner, or User
+    Access Administrator / Role Based Access Control Administrator) at the
+    assignment scope **and** at the Log Analytics workspace scope, because
+    `scripts/assign.sh` grants the initiative's managed identity three roles
+    (the diagnostics DINE policy needs them; this audit policy does not).
 
 ## Option A — deploy the whole baseline
 
@@ -71,8 +92,9 @@ up automatically:
 # 1. Publish all 16 definitions + the initiative at subscription scope
 ./scripts/deploy.sh
 
-# 2. Assign the initiative (see examples/assignment-params.example.json)
-./scripts/assign.sh <scope> my-params.json
+# 2. Assign the initiative (start from examples/assignment-params.example.json)
+./scripts/assign.sh --params my-params.json \
+  --scope "/subscriptions/<sub-id>"          # omit --scope for current sub
 ```
 
 `effectFileShareBackup` defaults to `AuditIfNotExists`; set it to `Disabled`
@@ -82,15 +104,18 @@ in your params file to switch the policy off without touching the initiative.
 
 ```bash
 SUB=$(az account show --query id -o tsv)
+POLICY=policies/operations/audit-file-share-backup-protection.json
 
-# 1. Create the definition at subscription scope
+# 1. Create the definition at subscription scope (fields read from the JSON
+#    so this recipe cannot drift from the definition)
 az policy definition create \
-  --name audit-file-share-backup-protection \
-  --display-name "[Baseline] Azure file shares should be protected by Azure Backup" \
-  --description "Audits SMB Azure file shares that are not protected by Azure Backup." \
-  --mode All \
-  --rules "$(jq -c .properties.policyRule policies/operations/audit-file-share-backup-protection.json)" \
-  --params "$(jq -c .properties.parameters policies/operations/audit-file-share-backup-protection.json)"
+  --name "$(jq -r .name $POLICY)" \
+  --display-name "$(jq -r .properties.displayName $POLICY)" \
+  --description "$(jq -r .properties.description $POLICY)" \
+  --mode "$(jq -r .properties.mode $POLICY)" \
+  --metadata category=Operations version=1.0.0 \
+  --rules "$(jq -c .properties.policyRule $POLICY)" \
+  --params "$(jq -c .properties.parameters $POLICY)"
 
 # 2. Assign it (example: one resource group)
 az policy assignment create \
@@ -99,23 +124,21 @@ az policy assignment create \
   --scope "/subscriptions/$SUB/resourceGroups/<your-rg>"
 ```
 
-No managed identity or role grants are needed — `AuditIfNotExists` only
-reads.
-
 ## Step-by-step: verify it works
 
 1. **Create a storage account and an SMB share** (or use an existing one):
 
    ```bash
    az storage account create -n <account> -g <your-rg> -l <region> --sku Standard_LRS
-   az storage share-rm create --storage-account <account> -n data01
+   az storage share-rm create --storage-account <account> -g <your-rg> -n data01
    ```
 
-2. **Trigger an on-demand compliance scan** (otherwise you wait for the
-   ~24-hour cycle):
+2. **Wait for the new assignment to propagate** (a fresh policy assignment
+   can take several minutes to become visible to scans), then **trigger an
+   on-demand compliance scan** — otherwise you wait for the ~24-hour cycle:
 
    ```bash
-   az policy state trigger-scan -g <your-rg>   # takes several minutes
+   az policy state trigger-scan -g <your-rg>   # blocks; takes several minutes
    ```
 
 3. **Read the verdict:**
@@ -126,16 +149,56 @@ reads.
      --query "[].{resource:resourceId, state:complianceState}" -o table
    ```
 
-   The unprotected share shows `NonCompliant`. It also appears in
-   Portal → Policy → Compliance, and in Azure Business Continuity Center.
+   The unprotected share shows `NonCompliant`. The same result appears in
+   Portal → Policy → Compliance. (The share may also show up as a
+   protectable resource in the protection-inventory views under **Resiliency
+   in Azure**, the successor to Azure Business Continuity Center — that is a
+   separate observation, not this policy's compliance result.)
 
-4. **Protect the share** (manually here; use the DINE built-ins at scale):
+4. **Protect the share.** A fresh Recovery Services vault has no Azure
+   Files (AzureStorage-workload) backup policy, so create one first —
+   `DefaultPolicy` in a new vault is the *VM* policy and will not work here:
 
    ```bash
    az backup vault create -n <vault> -g <your-rg> -l <region>
+
+   # Create an AzureStorage-workload backup policy (daily, 30-day retention)
+   cat > afs-policy.json <<'EOF'
+   {
+     "properties": {
+       "backupManagementType": "AzureStorage",
+       "workloadType": "AzureFileShare",
+       "schedulePolicy": {
+         "schedulePolicyType": "SimpleSchedulePolicy",
+         "scheduleRunFrequency": "Daily",
+         "scheduleRunTimes": ["2026-01-01T02:00:00Z"]
+       },
+       "retentionPolicy": {
+         "retentionPolicyType": "LongTermRetentionPolicy",
+         "dailySchedule": {
+           "retentionTimes": ["2026-01-01T02:00:00Z"],
+           "retentionDuration": { "count": 30, "durationType": "Days" }
+         }
+       },
+       "timeZone": "UTC"
+     }
+   }
+   EOF
+   az backup policy create --vault-name <vault> -g <your-rg> \
+     --name afs-daily --backup-management-type AzureStorage --policy afs-policy.json
+
    az backup protection enable-for-azurefileshare \
      --vault-name <vault> -g <your-rg> \
-     --storage-account <account> --azure-file-share data01 --policy-name DefaultPolicy
+     --storage-account <account> --azure-file-share data01 --policy-name afs-daily
+   ```
+
+   Configure-backup is **asynchronous** — confirm the job finished before
+   rescanning:
+
+   ```bash
+   az backup job list --vault-name <vault> -g <your-rg> \
+     --query "[].{op:properties.operation, status:properties.status}" -o table
+   # wait until ConfigureBackup shows Completed
    ```
 
 5. **Re-scan and confirm `Compliant`** — repeat steps 2–3. Enabling backup is
@@ -159,34 +222,52 @@ follow:
    ships are supported (VM → backupprotecteditems, share →
    backupprotecteditems; blob protection uses a different pseudo-type,
    `Microsoft.DataProtection/backupInstances`, at account level).
-3. **Vaulted vs snapshot-only protection is not distinguishable.** A share
-   with snapshot-tier-only protection counts as protected.
+3. **Don't restrict the vault location in the rule.** Cross-resource-group
+   vaults are handled by the pseudo-type correlation; Azure Backup's own
+   region/subscription constraints already govern where protection can live.
 
 ## Caveats
 
-- **Evaluation latency.** ARM-created/updated shares evaluate roughly 15
-  minutes after the write (`AuditIfNotExists` has a default evaluation delay
-  of `PT10M`). Shares created purely through the data plane (SMB/FileREST)
-  produce no ARM write event and are only picked up by the daily compliance
-  cycle or an on-demand `az policy state trigger-scan`.
+- **Existence-only.** See "What this policy does" — this is not a
+  backup-health, freshness, retention, or restore-test control, and
+  snapshot-only Azure Backup protection counts as compliant.
+- **Evaluation latency.** New policy assignments take several minutes to
+  propagate before scans see them. ARM-created/updated shares evaluate
+  roughly 15 minutes after the write (`AuditIfNotExists` has a default
+  evaluation delay of `PT10M`). Shares created without an ARM write — e.g.
+  via the FileREST Create Share API with a storage key/SAS — are only picked
+  up by the daily compliance cycle or an on-demand
+  `az policy state trigger-scan`.
 - **After enabling backup**, the share stays `NonCompliant` until the next
-  scan — protection is not a write to the share.
+  scan — protection is not a write to the share. Wait for the asynchronous
+  ConfigureBackup job to complete before rescanning.
 - **NFS shares are invisible** to this policy by design (see above).
-- **Snapshot-only protection counts as compliant** — you cannot audit
-  "vaulted backup specifically" with this mechanism.
+- **Backup eligibility is not evaluated.** The policy audits every SMB share
+  even when a given Azure Backup tier cannot currently protect it — e.g.
+  vault-standard (vaulted) backup has size/object limits (currently 10 TiB
+  and 10 million files/folders per share), same-region vault requirements,
+  and storage-account networking/key-access requirements. See the
+  [Azure Files backup support matrix](https://learn.microsoft.com/en-us/azure/backup/azure-file-share-support-matrix).
+  Very large shares may only be protectable at snapshot tier.
+- **Vault throughput limits** (often misquoted as policy limits): up to 200
+  file shares can be *configured* for protection per vault per day, and up
+  to 2,000 protected shares can be associated with one vault — per the
+  support matrix above. The DINE remediation built-ins additionally accept
+  one location per assignment and do not support management-group scope.
 - **The built-in twin is Preview** (`1.0.0-preview` since Feb 2025). This
-  custom definition freezes the same rule at `1.0.0` under your control.
+  custom definition freezes the same rule text at `1.0.0` under your
+  control; the engine-side correlation behavior remains Microsoft's.
 - **Recovery Services vault, not Backup vault.** Azure Files backup
   (including vaulted backup, GA March 2025) lives in Recovery Services
   vaults. The newer `Microsoft.DataProtection` Backup vaults are a different
   product surface and never satisfy this check.
-- **Scale note for the DINE remediation built-ins:** one location per
-  assignment, no management-group scope, and Microsoft advises staying under
-  ~200 shares per assignment.
 
 ## Live validation
 
-See `docs/LIVE-TEST-2026-07-28-file-share-backup.md` for the dated record of
-this policy's end-to-end test (deploy → NonCompliant → enable backup →
-Compliant → teardown) on a disposable subscription. The 2026-07-16 fifteen-
-policy live test (`docs/LIVE-TEST-2026-07-16.md`) predates this policy.
+See
+[docs/LIVE-TEST-2026-07-28-file-share-backup.md](LIVE-TEST-2026-07-28-file-share-backup.md)
+for the dated record of this policy's end-to-end test (deploy →
+NonCompliant → enable backup → Compliant → teardown) on a disposable
+subscription. The
+[2026-07-16 15-policy live test](LIVE-TEST-2026-07-16.md) predates this
+policy.

@@ -124,9 +124,15 @@ your normal lifecycle tooling.
 
 ## Live validation
 
-The full baseline was server-validated and exercised in a disposable Azure
-subscription on 2026-07-16. The test matrix, platform caveats, fixes found, and
-cleanup assertions are recorded in [docs/LIVE-TEST-2026-07-16.md](docs/LIVE-TEST-2026-07-16.md).
+The original 15-policy baseline was server-validated and exercised in a
+disposable Azure subscription on 2026-07-16. The test matrix, platform caveats,
+fixes found, and cleanup assertions are recorded in
+[docs/LIVE-TEST-2026-07-16.md](docs/LIVE-TEST-2026-07-16.md). Policy #16
+(`audit-file-share-backup-protection`) was added later and validated
+separately on 2026-07-28 — see
+[docs/LIVE-TEST-2026-07-28-file-share-backup.md](docs/LIVE-TEST-2026-07-28-file-share-backup.md)
+and the step-by-step
+[file-share backup audit guide](docs/GUIDE-file-share-backup-audit.md).
 
 ## Validating changes
 

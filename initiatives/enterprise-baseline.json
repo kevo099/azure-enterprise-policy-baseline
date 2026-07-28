@@ -2,7 +2,7 @@
   "name": "enterprise-baseline",
   "properties": {
     "displayName": "[Baseline] Enterprise governance baseline",
-    "description": "Bundles the sixteen enterprise baseline policies (security, governance, operations, identity) into a single assignable initiative. Every policy's effect is surfaced as an initiative parameter so the whole baseline can be flipped between Audit and Deny per policy during rollout without editing definitions.",
+    "description": "Bundles the sixteen enterprise baseline policies (security, governance, operations, identity) into a single assignable initiative. Every policy's effect is surfaced as an initiative parameter so each control can be staged in audit mode, enforced or remediated where its effect supports it, or disabled — all from assignment parameters, without editing definitions.",
     "metadata": {
       "version": "2.1.0",
       "category": "Governance"

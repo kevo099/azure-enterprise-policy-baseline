@@ -50,19 +50,21 @@ the built-in).
 `count(... where ...) > 0` rather than the equivalent but harder-to-review
 `not(... notLike ...)` construction some built-ins use.
 
-**Tag governance is a two-policy system.** Deny untagged *resource groups*
-(humans create those deliberately) + Modify-inherit onto *resources* (created
-constantly, often by automation). Enforcing tags on every resource directly
-generates deployment friction; inheriting from the RG gives the same cost
-attribution coverage for free. The Modify policy uses the Contributor role
-for remediation to match Microsoft's built-in inherit-tag policy; scope it
-down to Tag Contributor if your security review prefers least privilege.
+**Tag governance is a two-policy system.** Deny missing or empty tags on
+*resource groups* (humans create those deliberately) + Modify-inherit onto
+*resources* that have a missing or empty value (created constantly, often by
+automation). Non-empty resource overrides are preserved. Enforcing tags on
+every resource directly generates deployment friction; inheriting from the RG
+gives the same cost attribution coverage for free. The Modify policy uses the
+Contributor role for remediation to match Microsoft's built-in inherit-tag
+policy; scope it down to Tag Contributor if your security review prefers least
+privilege.
 
-**Diagnostics DINE uses `categoryGroup: "audit"`.** Category groups track
-new log categories automatically, unlike enumerating categories. The
-existence condition requires an enabled `audit` category group pointed at the
-central workspace, which matches Microsoft's current-generation diagnostics
-built-ins.
+**Diagnostics DINE uses `categoryGroup: "audit"`.** Category groups track new
+log categories automatically, unlike enumerating categories. The existence
+condition requires enabled `audit` logs and `AllMetrics` pointed at the central
+workspace. `evaluationDelay: AfterProvisioning` avoids a fixed post-create wait,
+and assignment tooling scopes Log Analytics permissions to the workspace.
 
 **Initiative references use a `{{DEFINITION_SCOPE}}` placeholder.** Policy
 set definitions must reference definitions by full resource ID, which isn't
@@ -91,6 +93,9 @@ wrong-but-working default is how policy ends up silently ineffective.
 - **`allowed-vm-skus` covers `Microsoft.Compute/virtualMachines` only**, not
   scale-set SKU properties. Add a VMSS variant if scale sets are common in
   your estate.
+- **The unmanaged-disk policy is legacy defense in depth.** Azure retired
+  unmanaged disks on 2026-03-31, so new subscriptions cannot provision a real
+  violating VM. A crafted ARM request can still prove policy interception.
 - **The diagnostics DINE can conflict with pre-existing settings** that send
   the same categories to a different sink under a different setting name
   (Azure rejects duplicate category/destination pairs). Existing vaults with
@@ -109,9 +114,14 @@ wrong-but-working default is how policy ends up silently ineffective.
 3. Assign to a throwaway resource group with `--dry-run`, deploy a
    deliberately non-compliant resource (e.g. a storage account with
    `--allow-blob-public-access true`), then
-   `az policy state trigger-scan --no-wait` and confirm it shows
+   `az policy state trigger-scan --resource-group <rg> --no-wait` and confirm it shows
    non-compliant.
 4. Promote the same assignment to enforcing and confirm the create is denied.
+5. Test `require-tag-on-resource-groups` separately at subscription scope,
+   excluding all existing resource groups with `notScopes`; an assignment on
+   an already-created RG cannot govern that RG's creation.
+6. Remove the assignment with `scripts/unassign.sh`, then remove definitions
+   with `scripts/undeploy.sh`.
 
 ## Versioning
 

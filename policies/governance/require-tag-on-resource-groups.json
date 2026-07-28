@@ -4,9 +4,9 @@
     "displayName": "[Baseline] Resource groups should carry the required tag",
     "policyType": "Custom",
     "mode": "All",
-    "description": "Denies creation of resource groups that lack the required tag (default: CostCenter). Enforcing the tag at the resource group level, combined with the companion tag-inheritance policy, guarantees every resource in the estate is attributable for cost allocation and ownership without taxing every individual deployment.",
+    "description": "Denies creation of resource groups that lack the required tag (default: CostCenter) or set it to an empty value. Enforcing a usable tag at the resource group level, combined with the companion tag-inheritance policy, guarantees every resource in the estate is attributable for cost allocation and ownership without taxing every individual deployment.",
     "metadata": {
-      "version": "1.0.0",
+      "version": "2.0.0",
       "category": "Governance"
     },
     "parameters": {
@@ -40,8 +40,16 @@
             "equals": "Microsoft.Resources/subscriptions/resourceGroups"
           },
           {
-            "field": "[concat('tags[', parameters('tagName'), ']')]",
-            "exists": "false"
+            "anyOf": [
+              {
+                "field": "[concat('tags[', parameters('tagName'), ']')]",
+                "exists": "false"
+              },
+              {
+                "field": "[concat('tags[', parameters('tagName'), ']')]",
+                "equals": ""
+              }
+            ]
           }
         ]
       },

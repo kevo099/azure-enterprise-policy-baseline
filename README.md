@@ -127,8 +127,8 @@ your normal lifecycle tooling.
 The original 15-policy baseline was server-validated and exercised in a
 disposable Azure subscription on 2026-07-16. The test matrix, platform caveats,
 fixes found, and cleanup assertions are recorded in
-[docs/LIVE-TEST-2026-07-16.md](docs/LIVE-TEST-2026-07-16.md). Policy #16
-(`audit-file-share-backup-protection`) was added later and validated
+[docs/LIVE-TEST-2026-07-16.md](docs/LIVE-TEST-2026-07-16.md). The
+`audit-file-share-backup-protection` policy was added later and validated
 separately on 2026-07-28 — see
 [docs/LIVE-TEST-2026-07-28-file-share-backup.md](docs/LIVE-TEST-2026-07-28-file-share-backup.md)
 and the step-by-step
@@ -158,6 +158,26 @@ definitions on disk. The same check runs in GitHub Actions on every push.
    drift apart.
 4. Re-run `./scripts/deploy.sh`; bump the `version` in any definition you
    changed.
+
+## Versioning and releases
+
+Repository releases use semantic tags such as `v1.0.0` for a tested snapshot
+of the complete baseline. The `version` fields inside policy and initiative
+JSON files are an independent namespace: bump the affected in-file version
+when its Azure definition changes, even when the repository release number
+also changes.
+
+Use a tagged release for reproducible deployment. Review the release notes and
+validation records before promoting a newer tag, and roll changes through the
+report-only workflow above rather than treating a repository tag as automatic
+authorization to enforce policy.
+
+## Support and security
+
+Use GitHub Issues for reproducible defects and documentation problems. This
+community project does not replace Microsoft support for Azure platform
+behavior. For security-sensitive reports, follow [SECURITY.md](SECURITY.md)
+instead of opening a public issue.
 
 ## License
 

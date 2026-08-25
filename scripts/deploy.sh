@@ -58,8 +58,7 @@ while IFS= read -r file; do
     --display-name "$(jq -r '.properties.displayName' "$file")" \
     --description "$(jq -r '.properties.description' "$file")" \
     --mode "$(jq -r '.properties.mode' "$file")" \
-    --metadata "category=$(jq -r '.properties.metadata.category' "$file")" \
-               "version=$(jq -r '.properties.metadata.version' "$file")" \
+    --metadata "$(jq -c '.properties.metadata | {category, version}' "$file")" \
     --params "$(jq -c '.properties.parameters' "$file")" \
     --rules "$(jq -c '.properties.policyRule' "$file")" \
     --output none
@@ -74,8 +73,8 @@ az policy set-definition create \
   --name "$(jq -r '.name' <<<"$initiative")" \
   --display-name "$(jq -r '.properties.displayName' <<<"$initiative")" \
   --description "$(jq -r '.properties.description' <<<"$initiative")" \
-  --metadata "category=$(jq -r '.properties.metadata.category' <<<"$initiative")" \
-             "version=$(jq -r '.properties.metadata.version' <<<"$initiative")" \
+  --metadata "$(jq -c \
+    '.properties.metadata | {category, version}' <<<"$initiative")" \
   --params "$(jq -c '.properties.parameters' <<<"$initiative")" \
   --definitions "$(jq -c '.properties.policyDefinitions' <<<"$initiative")" \
   --output none

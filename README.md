@@ -54,7 +54,7 @@ initiatives/         enterprise-baseline.json (policy set definition)
 scripts/             Deploy, assign, unassign, undeploy, and validation tools
 examples/            Starter assignment parameter values
 docs/DESIGN.md       Design decisions, sources, known limitations, rollout SOP
-.github/workflows/   CI: structural validation on every push and PR
+.github/workflows/   CI: validation on PRs and pushes to main
 ```
 
 Each policy file is a complete, self-describing definition: `displayName`,
@@ -133,11 +133,14 @@ separately on 2026-07-28 — see
 [docs/LIVE-TEST-2026-07-28-file-share-backup.md](docs/LIVE-TEST-2026-07-28-file-share-backup.md)
 and the step-by-step
 [file-share backup audit guide](docs/GUIDE-file-share-backup-audit.md).
+For automatic protection and independent reconciliation, see the
+[Azure file-share backup enforcement guide](docs/GUIDE-file-share-backup-enforcement.md).
 
 ## Validating changes
 
 ```bash
 python3 scripts/validate.py
+python3 -m unittest discover -s tests -v
 ```
 
 The validator checks JSON syntax, required properties, name/filename
@@ -145,7 +148,11 @@ agreement, that every parameter is both declared and used, that `count`
 expressions carry a comparison operator, that Modify/DeployIfNotExists
 policies declare `roleDefinitionIds` and deployment details, and that the
 initiative's references, parameter bindings, and coverage all line up with the
-definitions on disk. The same check runs in GitHub Actions on every push.
+definitions on disk. The unit suite also exercises the Azure Files backup
+reconciler's subscription-aware item correlation, account-level vault
+registration, soft-delete and SMB/NFS handling, safety caps, and apply/wait
+behavior. Both checks run in GitHub Actions for pull requests and pushes to
+`main`; CI also syntax-checks every shell script and example JSON file.
 
 ## Extending the baseline
 

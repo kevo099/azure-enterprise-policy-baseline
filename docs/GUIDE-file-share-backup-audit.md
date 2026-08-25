@@ -113,7 +113,7 @@ az policy definition create \
   --display-name "$(jq -r .properties.displayName $POLICY)" \
   --description "$(jq -r .properties.description $POLICY)" \
   --mode "$(jq -r .properties.mode $POLICY)" \
-  --metadata category=Operations version=1.0.0 \
+  --metadata "$(jq -c .properties.metadata "$POLICY")" \
   --rules "$(jq -c .properties.policyRule $POLICY)" \
   --params "$(jq -c .properties.parameters $POLICY)"
 

@@ -1,22 +1,62 @@
 # Azure Enterprise Policy Baseline
 
-A ready-to-deploy set of **16 custom Azure Policy definitions**, bundled into a
-single **initiative**, that implements the governance guardrails Microsoft
-recommends for enterprise Azure estates. The patterns are drawn from
-Microsoft's own published governance tooling — the Azure Policy built-in
-catalog, the Azure Landing Zones (Enterprise-Scale) policy set, and the Cloud
-Adoption Framework governance disciplines — re-implemented as clean,
-consistently parameterized custom definitions you own, can read end-to-end,
-and can extend.
+A decision-first Azure governance reference: use Microsoft-managed built-in
+policies and Microsoft-published deployment templates first, then use this
+repository's **16 custom Azure Policy definitions** where you need a pinned
+rule, an organization-owned definition, or one consistently parameterized
+initiative. The custom definitions are bundled into a single **initiative**
+and remain ready to deploy, read end-to-end, and extend.
 
-Everything deploys and tears down with small shell scripts (`az` + `jq` are
-the only dependencies), and a stdlib-only Python validator keeps the JSON
-honest in CI.
+The recommendations are drawn from Microsoft's Azure Policy built-in catalog,
+Azure Landing Zones (Enterprise-Scale), Cloud Adoption Framework governance
+disciplines, and Microsoft-published templates. A custom implementation is an
+explicit fallback or extension, not the default merely because it is included
+here.
+
+The custom baseline deploys and tears down with small shell scripts (`az` +
+`jq` are the only dependencies), and a stdlib-only Python validator keeps the
+JSON honest in CI.
 
 > This is a community project. It is not affiliated with or endorsed by
 > Microsoft.
 
-## What's in the baseline
+## Recommended order of use
+
+1. Prefer a generally available Microsoft built-in when it expresses the
+   required control.
+2. Evaluate a Microsoft Preview built-in in report-only mode and a canary scope
+   before enabling remediation.
+3. Use a Microsoft Quickstart or Azure Verified Module when the requirement is
+   resource deployment rather than continuous policy evaluation.
+4. Use the custom definitions below when the Microsoft option is missing,
+   unsuitable, prohibited by your Preview policy, or must be frozen and owned
+   by your organization.
+
+### Azure Files backup: Microsoft options first
+
+For automatic coverage, start with Microsoft's existing-vault, tag-exclusion
+policy. It keeps vault and backup-policy design under central control. The
+remaining Microsoft policies and templates cover tag-inclusion,
+application-owned vaults, report-only auditing, and explicitly named shares.
+
+| Evaluation order | Microsoft option | Use case |
+|---|---|---|
+| 1 | `e159e079-0ddd-4905-97c9-79a8fca6d880` — existing vault, exclude a tag | Central-vault `DeployIfNotExists` coverage for eligible shares |
+| 2 | `cfc5190a-3b19-4a23-b563-a4c719b666e4` — audit | Microsoft-managed report-only coverage signal |
+| 3 | `d8659d5a-a3bd-444d-98ea-570bceb568cf` — existing vault, include a tag | Opt-in central-vault coverage |
+| 4 | `9e47cad9-bcdb-42dd-8c9b-a81e15ca2842` / `f32ca068-2ada-4705-b5b5-84ce89422846` — create a vault | Application-owned vault patterns; review the fixed defaults first |
+| 5 | [Daily](https://github.com/Azure/azure-quickstart-templates/tree/master/quickstarts/microsoft.recoveryservices/recovery-services-backup-file-share) / [hourly](https://github.com/Azure/azure-quickstart-templates/tree/master/quickstarts/microsoft.recoveryservices/recovery-services-backup-file-share-hourly) Quickstarts | Reference deployment for one explicitly named share; not all-share enforcement |
+| 6 | [Azure Verified Recovery Services vault module](https://github.com/Azure/terraform-azurerm-avm-res-recoveryservices-vault) | Terraform-managed vault, policy, and explicit protected-share maps |
+
+The five Azure Policy definitions above are currently Preview. Follow the
+[Azure Files enforcement guide](docs/GUIDE-file-share-backup-enforcement.md)
+for prerequisites, RBAC, canary rollout, and tested boundaries.
+
+## Custom policy catalog
+
+Review the Microsoft options above before deploying these definitions. The
+custom catalog is valuable when you deliberately need repository-owned policy
+artifacts and a single assignment surface.
 
 | # | Policy | Category | Default effect | What it enforces |
 |---|--------|----------|----------------|------------------|
@@ -32,7 +72,7 @@ honest in CI.
 | 10 | `allowed-locations` | Governance | Deny | Resources may only deploy to approved regions |
 | 11 | `allowed-vm-skus` | Governance | Deny | VMs may only use approved sizes |
 | 12 | `audit-vm-backup-protection` | Operations | AuditIfNotExists | Flags VMs not protected by Azure Backup |
-| 13 | `audit-file-share-backup-protection` | Operations | AuditIfNotExists | Flags SMB Azure file shares not protected by Azure Backup |
+| 13 | `audit-file-share-backup-protection` | Operations | AuditIfNotExists | Flags unprotected SMB shares; optional custom fallback for Microsoft's Preview audit policy |
 | 14 | `deny-vm-unmanaged-disks` | Operations | Deny | VMs and scale sets must use managed disks |
 | 15 | `deploy-keyvault-diagnostics` | Operations | DeployIfNotExists | Auto-deploys key vault audit logging and metrics to Log Analytics |
 | 16 | `audit-vm-system-assigned-identity` | Identity | Audit | Flags VMs without a system-assigned managed identity |
@@ -61,7 +101,11 @@ Each policy file is a complete, self-describing definition: `displayName`,
 `description` (including *why* the control matters), semantic `version`,
 `mode`, declared `parameters`, and the `policyRule`.
 
-## Quickstart
+## Custom baseline quickstart
+
+Use this flow only after deciding that the repository-owned initiative is the
+right fit. For Azure Files backup, follow the Microsoft-first recommendation
+above before deploying the custom fallback.
 
 ```bash
 az login
@@ -124,17 +168,20 @@ your normal lifecycle tooling.
 
 ## Live validation
 
-The original 15-policy baseline was server-validated and exercised in a
-disposable Azure subscription on 2026-07-16. The test matrix, platform caveats,
-fixes found, and cleanup assertions are recorded in
+For Azure Files backup, begin with the Microsoft-first
+[enforcement guide](docs/GUIDE-file-share-backup-enforcement.md). It covers the
+service-owned Preview policies, official templates, the optional custom audit
+fallback, and the reconciliation automation.
+
+The original 15-policy custom baseline was server-validated and exercised in
+a disposable Azure subscription on 2026-07-16. The test matrix, platform
+caveats, fixes found, and cleanup assertions are recorded in
 [docs/LIVE-TEST-2026-07-16.md](docs/LIVE-TEST-2026-07-16.md). The
-`audit-file-share-backup-protection` policy was added later and validated
-separately on 2026-07-28 — see
+optional `audit-file-share-backup-protection` custom fallback was added later
+and validated separately on 2026-07-28 — see
 [docs/LIVE-TEST-2026-07-28-file-share-backup.md](docs/LIVE-TEST-2026-07-28-file-share-backup.md)
 and the step-by-step
 [file-share backup audit guide](docs/GUIDE-file-share-backup-audit.md).
-For automatic protection and independent reconciliation, see the
-[Azure file-share backup enforcement guide](docs/GUIDE-file-share-backup-enforcement.md).
 
 ## Validating changes
 

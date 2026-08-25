@@ -1,19 +1,24 @@
 # Guide: ensuring Azure file shares are protected
 
-This guide pairs the baseline's independent audit policy with Microsoft's
-automatic-protection policy and a caller-driven reconciliation script. The
-combination covers three different jobs:
+Start with Microsoft-managed Azure Policy built-ins and Microsoft-published
+reference templates. Add repository-owned controls only when their distinct
+behavior is required:
 
-1. `audit-file-share-backup-protection` reports every classic SMB Azure file
-   share that has no Azure Backup protected-item record.
-2. Microsoft's built-in `DeployIfNotExists` policy automatically protects new
-   eligible shares after Azure Policy evaluates them.
-3. `scripts/ensure_file_share_backup.py` inventories and protects existing
+1. Microsoft's existing-vault `DeployIfNotExists` policy automatically
+   protects eligible shares after Azure Policy evaluates them.
+2. Microsoft's audit policy reports classic SMB shares without a correlated
+   Azure Backup protected-item record.
+3. Microsoft Quickstarts provide first-party deployment examples for one
+   explicitly named share; they are references, not all-share enforcement.
+4. `scripts/ensure_file_share_backup.py` inventories and protects existing
    classic SMB shares immediately, without waiting for Policy propagation or a
    remediation task. It can be run on a schedule as an independent
    reconciliation path.
+5. The repository's custom audit policy is an optional pinned fallback when
+   Preview adoption is prohibited or an organization-owned initiative
+   reference is required. Do not assign it alongside Microsoft's audit twin.
 
-## Recommended Microsoft built-in
+## Microsoft built-ins and templates — recommended first
 
 Use **`[Preview]: Configure backup for Azure Files Shares without a given tag
 to an existing recovery services vault in the same location`**:
@@ -25,25 +30,33 @@ e159e079-0ddd-4905-97c9-79a8fca6d880
 As of 2026-08-25, the definition is `2.0.0-preview`. It accepts an existing
 Azure Files backup-policy resource ID, keeps vault configuration under your
 control, and can register storage accounts when `registerStorageAccount=true`.
-Assign it once for each subscription/region/vault combination. Keep the
-baseline's audit policy assigned as a separate coverage signal.
+Assign it once for each subscription/region/vault combination. Use Microsoft's
+built-in audit policy as the separate coverage signal. Substitute—not add—the
+baseline's custom audit only when you need a pinned definition.
 
 Microsoft publishes five Azure Files backup definitions, all currently
 Preview:
 
-| Purpose | Definition ID | Version |
-|---|---|---|
-| Audit unprotected SMB shares | `cfc5190a-3b19-4a23-b563-a4c719b666e4` | `1.0.0-preview` |
-| Existing vault, exclude a tag (recommended) | `e159e079-0ddd-4905-97c9-79a8fca6d880` | `2.0.0-preview` |
-| Existing vault, include a tag | `d8659d5a-a3bd-444d-98ea-570bceb568cf` | `2.0.0-preview` |
-| Create a vault, exclude a tag | `9e47cad9-bcdb-42dd-8c9b-a81e15ca2842` | `1.0.0-preview` |
-| Create a vault, include a tag | `f32ca068-2ada-4705-b5b5-84ce89422846` | `1.0.0-preview` |
+| Order | Purpose | Definition ID | Version |
+|---|---|---|---|
+| 1 | Existing vault, exclude a tag — recommended enforcement | `e159e079-0ddd-4905-97c9-79a8fca6d880` | `2.0.0-preview` |
+| 2 | Audit unprotected SMB shares — recommended reporting | `cfc5190a-3b19-4a23-b563-a4c719b666e4` | `1.0.0-preview` |
+| 3 | Existing vault, include a tag | `d8659d5a-a3bd-444d-98ea-570bceb568cf` | `2.0.0-preview` |
+| 4 | Create a vault, exclude a tag | `9e47cad9-bcdb-42dd-8c9b-a81e15ca2842` | `1.0.0-preview` |
+| 5 | Create a vault, include a tag | `f32ca068-2ada-4705-b5b5-84ce89422846` | `1.0.0-preview` |
 
 See Microsoft's [Backup Policy
 catalog](https://learn.microsoft.com/en-us/azure/backup/policy-reference) and
 [Azure Files Policy automation
 guide](https://learn.microsoft.com/en-us/azure/backup/backup-azure-files-policy-automation)
 for the service-owned definitions and assignment prerequisites.
+
+Microsoft also publishes [daily](https://github.com/Azure/azure-quickstart-templates/tree/master/quickstarts/microsoft.recoveryservices/recovery-services-backup-file-share)
+and [hourly](https://github.com/Azure/azure-quickstart-templates/tree/master/quickstarts/microsoft.recoveryservices/recovery-services-backup-file-share-hourly)
+Quickstarts plus an [Azure Verified Recovery Services vault
+module](https://github.com/Azure/terraform-azurerm-avm-res-recoveryservices-vault).
+These templates protect explicitly declared shares. Use them as first-party
+deployment references, not as proof that every share is continuously covered.
 
 The existing-vault v2 definitions support a Vault-Standard policy in another
 subscription when all documented cross-subscription prerequisites are met.
@@ -57,6 +70,16 @@ application-owned-vault patterns, but the "new vault" variants hard-code a
 daily 08:00 UTC schedule, five days of snapshot retention, 30 days of vault
 retention, and `publicNetworkAccess: Enabled`. That is usually too opinionated
 for an enterprise baseline.
+
+## Repository custom alternatives and complements
+
+Use these after reviewing the Microsoft options above:
+
+| Repository artifact | Role | When to use it |
+|---|---|---|
+| `scripts/ensure_file_share_backup.py` | Immediate and scheduled reconciliation | Backstop Policy latency and independently detect or repair coverage gaps |
+| `audit-file-share-backup-protection` | Custom audit-policy fallback | Only when Preview adoption is prohibited or a pinned organization-owned definition is required; do not assign it with Microsoft's audit twin |
+| `examples/azure-files-backup-policy.json` | Starter Azure Backup schedule and retention input | Bootstrap a reviewed backup policy; this is not an Azure governance policy |
 
 ## Prerequisites
 
@@ -284,7 +307,8 @@ the test identity could not validate DINE managed-identity role grants. See
   backup alternative. Azure Verified Terraform supports explicit protected-
   share maps, not automatic discovery of every share.
 
-That evidence is why this project keeps a live-tested audit rule, uses the
-Microsoft built-in for ongoing DINE behavior, and adds an independently tested
-inventory/reconciliation path rather than claiming that repository presence
-alone proves end-to-end enforcement.
+That evidence is why this project recommends Microsoft's service-owned
+built-ins first, retains the live-tested custom audit only as an optional
+fallback, and adds an independently tested inventory/reconciliation backstop
+rather than claiming that repository presence alone proves end-to-end
+enforcement.

@@ -1,8 +1,45 @@
 # Guide: auditing Azure file share backup with `audit-file-share-backup-protection`
 
-Step-by-step instructions for deploying, assigning, and reading results from
-the baseline's file-share backup audit policy — standalone or as part of the
-`enterprise-baseline` initiative.
+This is the custom-fallback guide. Start with Microsoft-managed built-in
+policies and Microsoft-published templates; use the repository definition only
+when you deliberately need a pinned, organization-owned rule.
+
+## Recommended starting point
+
+For report-only coverage, prefer Microsoft's Preview audit definition:
+
+```text
+cfc5190a-3b19-4a23-b563-a4c719b666e4
+```
+
+Assign the built-in directly; it needs no managed identity or role grants:
+
+```bash
+SUB=$(az account show --query id -o tsv)
+az policy assignment create \
+  --name azure-files-backup-audit \
+  --display-name "Audit Azure Files backup coverage" \
+  --policy "/providers/Microsoft.Authorization/policyDefinitions/cfc5190a-3b19-4a23-b563-a4c719b666e4" \
+  --scope "/subscriptions/$SUB/resourceGroups/<canary-rg>"
+```
+
+For automatic protection, prefer the existing-vault, tag-exclusion
+`DeployIfNotExists` definition:
+
+```text
+e159e079-0ddd-4905-97c9-79a8fca6d880
+```
+
+Microsoft's audit definition has the same rule as this custom policy. Do not
+assign both: that creates duplicate compliance records without increasing
+coverage. Use the custom instructions below only when Preview adoption is
+prohibited, a stable organization-owned definition ID is required, or the
+rule must remain inside the repository's custom initiative.
+
+Microsoft's [daily](https://github.com/Azure/azure-quickstart-templates/tree/master/quickstarts/microsoft.recoveryservices/recovery-services-backup-file-share)
+and [hourly](https://github.com/Azure/azure-quickstart-templates/tree/master/quickstarts/microsoft.recoveryservices/recovery-services-backup-file-share-hourly)
+Quickstarts are first-party reference templates for one explicitly named
+share. They are not subscription-wide audit or enforcement controls.
 
 ## What this policy does
 
@@ -38,23 +75,26 @@ products do **not** satisfy it; snapshot-tier-only Azure Backup **does**.
 Microsoft ships a built-in audit policy with the same rule:
 **`[Preview]: Azure Backup should be enabled on Azure file shares`**
 (`cfc5190a-3b19-4a23-b563-a4c719b666e4`, `1.0.0-preview`, added Feb 2025).
-This custom policy is a custom clone pinned to the built-in's
-`1.0.0-preview` rule JSON, kept in the baseline so that:
+The Microsoft built-in is the default recommendation. This custom policy is a
+fallback clone pinned to the built-in's `1.0.0-preview` rule JSON, retained so
+that organizations can choose to:
 
-- the baseline does not depend on a *preview* definition Microsoft may change
-  or withdraw (the built-in is in no built-in initiative and has no
-  regulatory-compliance mapping);
-- the effect is wired into the initiative's parameter surface like every
-  other baseline policy (`effectFileShareBackup`);
-- the definition is versioned and testable in this repo.
+- avoid depending on a *preview* definition Microsoft may change or withdraw
+  (the built-in is in no built-in initiative and has no regulatory-compliance
+  mapping);
+- wire the effect into the initiative's parameter surface like every other
+  baseline policy (`effectFileShareBackup`); or
+- version and test the definition in this repository.
 
 Pinning the JSON pins only the rule text — the Policy engine's pseudo-type
-correlation behavior stays platform-side either way. If you prefer the
-built-in, assign `cfc5190a-3b19-4a23-b563-a4c719b666e4` instead — the
-compliance results are identical.
+correlation behavior stays platform-side either way. Unless one of the custom
+requirements above applies, assign
+`cfc5190a-3b19-4a23-b563-a4c719b666e4`; the compliance results are identical.
 
-To **remediate** (not just audit), pair this policy with Microsoft's built-in
-DeployIfNotExists policies, which enable backup automatically:
+To **remediate** rather than only audit, use Microsoft's built-in
+DeployIfNotExists policies. The existing-vault, tag-exclusion option is the
+recommended default; the remaining definitions support opt-in and
+application-owned-vault designs:
 
 | Built-in GUID | What it does |
 |---|---|

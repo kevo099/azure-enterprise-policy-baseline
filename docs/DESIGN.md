@@ -5,9 +5,11 @@ edges to know about before enforcing it.
 
 ## Sources and method
 
-Each policy re-implements a control that appears in Microsoft's own published
-governance guidance, selected for being broadly applicable to any enterprise
-rather than industry-specific:
+The operational selection rule is Microsoft first: evaluate supported
+service-owned built-in policies, Azure Landing Zones assignments, and official
+deployment templates before adopting a repository-owned definition. The
+custom catalog then provides pinned alternatives for controls that are broadly
+applicable to enterprises rather than industry-specific:
 
 - **Azure Policy built-in catalog** — the rule *patterns* (alias choices,
   `exists`/`equals` handling for properties with platform defaults, the
@@ -23,10 +25,18 @@ rather than industry-specific:
   (security baseline, cost/resource consistency, identity, operations) comes
   from CAF's Five Disciplines of Cloud Governance.
 
-Custom re-implementations were chosen over assigning built-ins directly so
-that the definitions are version-controlled here, readable end-to-end,
-consistently parameterized (every policy exposes `effect`), and independent of
-built-in IDs that Microsoft occasionally deprecates.
+Custom re-implementations remain available so definitions can be
+version-controlled here, read end-to-end, consistently parameterized (every
+policy exposes `effect`), and kept under an organization-owned ID. Those are
+explicit tradeoffs, not a blanket claim that custom is better. If a Microsoft
+built-in or template satisfies the requirement and its lifecycle state is
+acceptable, it is the recommended starting point.
+
+Azure Files backup demonstrates the rule: use Microsoft's existing-vault
+`DeployIfNotExists` and audit definitions first. Use this repository's custom
+audit twin only when Preview adoption is prohibited or a pinned initiative
+reference is required, and use the reconciliation script as an independent
+operational backstop.
 
 ## Decisions
 

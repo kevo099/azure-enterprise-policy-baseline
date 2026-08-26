@@ -1,7 +1,7 @@
 # Live Azure validation — file-share backup audit — 2026-07-28
 
-This test deployed and exercised policy #16,
-`audit-file-share-backup-protection`, in a disposable Microsoft-sponsored
+This test deployed and exercised `audit-file-share-backup-protection` in a
+disposable Microsoft-sponsored
 Azure subscription. It was a focused validation of the file-share backup
 control only. The separate
 [2026-07-16 live test](LIVE-TEST-2026-07-16.md) covers the baseline's original

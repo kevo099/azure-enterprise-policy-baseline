@@ -2,3 +2,5 @@ __pycache__/
 *.tmp
 .DS_Store
 /my-params.json
+/azure-files-backup-assignment.json
+/azure-files-canary-state.env

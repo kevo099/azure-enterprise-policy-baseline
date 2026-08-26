@@ -52,6 +52,15 @@ The five Azure Policy definitions above are currently Preview. Follow the
 [Azure Files enforcement guide](docs/GUIDE-file-share-backup-enforcement.md)
 for prerequisites, RBAC, canary rollout, and tested boundaries.
 
+For a cold start, use the
+[end-to-end replication runbook](docs/RUNBOOK-replicate-azure-files-backup.md).
+It creates an isolated SMB canary, stages the existing-vault policy in
+`DoNotEnforce`, verifies exact role grants before promotion, waits for
+remediation, proves an on-demand recovery point, performs an alternate-share
+restore, compares the recovered bytes, and separates governance cleanup from
+destructive backup-data cleanup. Empty Policy output is treated as
+inconclusive, never compliant.
+
 ## Custom policy catalog
 
 Review the Microsoft options above before deploying these definitions. The
@@ -94,6 +103,7 @@ initiatives/         enterprise-baseline.json (policy set definition)
 scripts/             Deploy, assign, unassign, undeploy, and validation tools
 examples/            Starter assignment parameter values
 docs/DESIGN.md       Design decisions, sources, known limitations, rollout SOP
+docs/RUNBOOK-*       Copy/paste canary deployment, proof, and teardown
 .github/workflows/   CI: validation on PRs and pushes to main
 ```
 
@@ -128,7 +138,8 @@ Monitoring Contributor are scoped to the assignment; Log Analytics Contributor
 is scoped to the selected workspace, even when that workspace is in another
 resource group. The script is idempotent and exits nonzero if any required role
 grant fails. `my-params.json` is gitignored so real subscription IDs stay out of
-the repo.
+the repo. `--dry-run` means `enforcementMode: DoNotEnforce`; it still writes the
+report-only assignment, managed identity, and required RBAC grants.
 
 ### Recommended rollout
 
@@ -171,7 +182,9 @@ your normal lifecycle tooling.
 For Azure Files backup, begin with the Microsoft-first
 [enforcement guide](docs/GUIDE-file-share-backup-enforcement.md). It covers the
 service-owned Preview policies, official templates, the optional custom audit
-fallback, and the reconciliation automation.
+fallback, and the reconciliation automation. Use the
+[replication runbook](docs/RUNBOOK-replicate-azure-files-backup.md) for a
+linear create → report-only → promote → backup → restore → teardown canary.
 
 The original 15-policy custom baseline was server-validated and exercised in
 a disposable Azure subscription on 2026-07-16. The test matrix, platform
@@ -182,6 +195,10 @@ and validated separately on 2026-07-28 — see
 [docs/LIVE-TEST-2026-07-28-file-share-backup.md](docs/LIVE-TEST-2026-07-28-file-share-backup.md)
 and the step-by-step
 [file-share backup audit guide](docs/GUIDE-file-share-backup-audit.md).
+The separate 2026-08-25 enforcement test exercised the reconciler, on-demand
+backup, recovery-point listing, and a byte-identical alternate restore; its
+Policy result was explicitly inconclusive. See the
+[qualified enforcement record](docs/LIVE-TEST-2026-08-25-file-share-backup-enforcement.md).
 
 ## Validating changes
 
@@ -198,7 +215,10 @@ initiative's references, parameter bindings, and coverage all line up with the
 definitions on disk. The unit suite also exercises the Azure Files backup
 reconciler's subscription-aware item correlation, account-level vault
 registration, soft-delete and SMB/NFS handling, safety caps, and apply/wait
-behavior. Both checks run in GitHub Actions for pull requests and pushes to
+behavior. Documentation tests validate local links, the checked-in assignment
+contract, snapshot-tier labeling, Bash syntax, and the required report-only →
+promotion → remediation → recovery → cleanup order. Both checks run in GitHub
+Actions for pull requests and pushes to
 `main`; CI also syntax-checks every shell script and example JSON file.
 
 ## Extending the baseline
@@ -215,11 +235,15 @@ behavior. Both checks run in GitHub Actions for pull requests and pushes to
 
 ## Versioning and releases
 
-Repository releases use semantic tags such as `v1.0.0` for a tested snapshot
+Repository releases use semantic tags such as `v1.1.0` for a tested snapshot
 of the complete baseline. The `version` fields inside policy and initiative
 JSON files are an independent namespace: bump the affected in-file version
 when its Azure definition changes, even when the repository release number
 also changes.
+
+`v1.1.0` is the first release that includes the Azure Files enforcement
+reconciler, Microsoft-built-in-first guidance, assignment-parameter example,
+and end-to-end replication runbook. `v1.0.0` predates those artifacts.
 
 Use a tagged release for reproducible deployment. Review the release notes and
 validation records before promoting a newer tag, and roll changes through the

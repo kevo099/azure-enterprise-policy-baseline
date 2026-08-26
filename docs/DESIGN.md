@@ -36,7 +36,9 @@ Azure Files backup demonstrates the rule: use Microsoft's existing-vault
 `DeployIfNotExists` and audit definitions first. Use this repository's custom
 audit twin only when Preview adoption is prohibited or a pinned initiative
 reference is required, and use the reconciliation script as an independent
-operational backstop.
+operational backstop. The
+[replication runbook](RUNBOOK-replicate-azure-files-backup.md) turns that
+decision into a canary deployment, recovery proof, and teardown sequence.
 
 ## Decisions
 

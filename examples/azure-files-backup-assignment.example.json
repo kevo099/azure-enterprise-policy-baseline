@@ -1,0 +1,22 @@
+{
+  "effect": {
+    "value": "DeployIfNotExists"
+  },
+  "vaultLocation": {
+    "value": "eastus2"
+  },
+  "backupPolicyId": {
+    "value": "/subscriptions/<subscription-id>/resourceGroups/<backup-resource-group>/providers/Microsoft.RecoveryServices/vaults/<recovery-services-vault>/backupPolicies/<azure-files-backup-policy>"
+  },
+  "registerStorageAccount": {
+    "value": true
+  },
+  "exclusionTagName": {
+    "value": "SkipAzureFilesBackup"
+  },
+  "exclusionTagValue": {
+    "value": [
+      "true"
+    ]
+  }
+}

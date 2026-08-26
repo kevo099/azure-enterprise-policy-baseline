@@ -123,22 +123,28 @@ not supported at management-group scope.)
     `scripts/assign.sh` grants the initiative's managed identity three roles
     (the diagnostics DINE policy needs them; this audit policy does not).
 
-## Option A — deploy the whole baseline
+## Option A — deploy the whole baseline only when you want all 16 controls
 
-The policy ships as #13 in the initiative, so the standard repo flow picks it
-up automatically:
+The Azure Files audit does **not** require the full initiative. This option
+publishes and assigns unrelated Deny, Modify, and DeployIfNotExists controls,
+so use it only when the complete baseline is already the intended outcome.
+Always start the initiative in `DoNotEnforce`:
 
 ```bash
 # 1. Publish all 16 definitions + the initiative at subscription scope
 ./scripts/deploy.sh
 
-# 2. Assign the initiative (start from examples/assignment-params.example.json)
+# 2. Create a report-only initiative assignment. This still creates the
+#    assignment identity and RBAC grants, but it does not enforce effects.
 ./scripts/assign.sh --params my-params.json \
-  --scope "/subscriptions/<sub-id>"          # omit --scope for current sub
+  --scope "/subscriptions/<sub-id>" \
+  --dry-run
 ```
 
 `effectFileShareBackup` defaults to `AuditIfNotExists`; set it to `Disabled`
 in your params file to switch the policy off without touching the initiative.
+Do not remove `--dry-run` until every other initiative effect and its scope
+has completed the baseline's normal review.
 
 ## Option B — deploy just this policy standalone
 
@@ -202,30 +208,11 @@ az policy assignment create \
    ```bash
    az backup vault create -n <vault> -g <your-rg> -l <region>
 
-   # Create an AzureStorage-workload backup policy (daily, 30-day retention)
-   cat > afs-policy.json <<'EOF'
-   {
-     "properties": {
-       "backupManagementType": "AzureStorage",
-       "workloadType": "AzureFileShare",
-       "schedulePolicy": {
-         "schedulePolicyType": "SimpleSchedulePolicy",
-         "scheduleRunFrequency": "Daily",
-         "scheduleRunTimes": ["2026-01-01T02:00:00Z"]
-       },
-       "retentionPolicy": {
-         "retentionPolicyType": "LongTermRetentionPolicy",
-         "dailySchedule": {
-           "retentionTimes": ["2026-01-01T02:00:00Z"],
-           "retentionDuration": { "count": 30, "durationType": "Days" }
-         }
-       },
-       "timeZone": "UTC"
-     }
-   }
-   EOF
+   # The checked-in example is a daily, 30-day SNAPSHOT-tier policy.
    az backup policy create --vault-name <vault> -g <your-rg> \
-     --name afs-daily --backup-management-type AzureStorage --policy afs-policy.json
+     --name afs-daily --backup-management-type AzureStorage \
+     --workload-type AzureFileShare \
+     --policy examples/azure-files-backup-policy.json
 
    az backup protection enable-for-azurefileshare \
      --vault-name <vault> -g <your-rg> \
@@ -244,6 +231,12 @@ az policy assignment create \
 5. **Re-scan and confirm `Compliant`** — repeat steps 2–3. Enabling backup is
    a Backup-RP operation, not a write to the share, so the flip only shows up
    after a scan (or the daily cycle).
+
+If either scan returns no state rows, record the result as **inconclusive**;
+never translate empty output into `Compliant`. Policy compliance is still only
+an existence signal. Use the [replication
+runbook](RUNBOOK-replicate-azure-files-backup.md) to prove a completed backup,
+listed recovery point, alternate restore, byte comparison, and safe teardown.
 
 ## How the existence check actually works
 
@@ -301,6 +294,12 @@ follow:
   (including vaulted backup, GA March 2025) lives in Recovery Services
   vaults. The newer `Microsoft.DataProtection` Backup vaults are a different
   product surface and never satisfy this check.
+- **Cost and teardown.** Audit assignment alone is read-only, but enabling
+  protection creates snapshot/vault costs. Deleting the audit or DINE
+  assignment does not stop existing protection. Share soft delete and
+  vault/item soft delete are distinct; retained tombstones can remain after
+  active resources are removed. Follow the replication runbook's separate
+  governance-cleanup and backup-data-cleanup sections.
 
 ## Live validation
 

@@ -63,6 +63,11 @@ class AzureCli:
                 text=True,
                 timeout=effective_timeout,
             )
+        except FileNotFoundError as exc:
+            raise AzureCliError(
+                "Azure CLI executable 'az' was not found; install Azure CLI "
+                "and authenticate before running this reconciler"
+            ) from exc
         except subprocess.TimeoutExpired as exc:
             raise AzureCliError(
                 f"{' '.join(command[:-2])}: exceeded "
@@ -559,7 +564,11 @@ def target_from_azure(
     if not location:
         raise AzureCliError(f"Recovery Services vault {vault_name!r} has no location")
     vault_subscription_id = subscription_from_resource_id((vault or {}).get("id"))
-    if vault_subscription_id and vault_subscription_id.casefold() != subscription_id.casefold():
+    if not vault_subscription_id:
+        raise AzureCliError(
+            f"Recovery Services vault {vault_name!r} returned no parseable resource ID"
+        )
+    if vault_subscription_id.casefold() != subscription_id.casefold():
         raise AzureCliError(
             "target vault resolved outside the selected subscription; "
             "this script supports same-subscription reconciliation only"
@@ -1257,9 +1266,21 @@ def parser() -> argparse.ArgumentParser:
             "subscription or resource group. Dry-run is the default."
         )
     )
-    result.add_argument("--vault-resource-group", required=True)
-    result.add_argument("--vault-name", required=True)
-    result.add_argument("--policy-name", required=True)
+    result.add_argument(
+        "--vault-resource-group",
+        required=True,
+        help="Resource group containing the target Recovery Services vault",
+    )
+    result.add_argument(
+        "--vault-name",
+        required=True,
+        help="Existing target Recovery Services vault name",
+    )
+    result.add_argument(
+        "--policy-name",
+        required=True,
+        help="Existing AzureFileShare backup policy in the target vault",
+    )
     result.add_argument(
         "--source-resource-group",
         help="Limit source storage accounts to one resource group (default: subscription)",
@@ -1274,8 +1295,18 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Enable/resume protection; without this flag the script only reports",
     )
-    result.add_argument("--wait-seconds", type=int, default=1800)
-    result.add_argument("--poll-seconds", type=int, default=20)
+    result.add_argument(
+        "--wait-seconds",
+        type=int,
+        default=1800,
+        help="Maximum apply wait for healthy configuration (default: 1800)",
+    )
+    result.add_argument(
+        "--poll-seconds",
+        type=int,
+        default=20,
+        help="Apply-mode protected-item poll interval (default: 20)",
+    )
     result.add_argument(
         "--command-timeout-seconds",
         type=int,
@@ -1297,7 +1328,12 @@ def parser() -> argparse.ArgumentParser:
             "registrations (maximum: 50)"
         ),
     )
-    result.add_argument("--json", action="store_true", dest="json_output")
+    result.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit one machine-readable JSON result envelope",
+    )
     return result
 
 

@@ -19,5 +19,5 @@ jobs:
         run: |
           bash -n scripts/*.sh
           jq empty examples/*.json
-      - name: Test backup reconciliation automation
+      - name: Test backup automation and replication documentation
         run: python3 -m unittest discover -s tests -v

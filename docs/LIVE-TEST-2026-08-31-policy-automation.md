@@ -59,8 +59,9 @@ resource was created by the retained fixture.
 
 ## Fresh Automation live results
 
-Two empty Recovery Services vaults each contained one empty Azure VM backup
-policy. The exact-name resource-group canary followed this sequence:
+Two empty Recovery Services vaults each contained one target empty Azure VM
+backup policy alongside Azure's service-created defaults. The exact-name
+resource-group canary followed this sequence:
 
 | Phase | Terminal action | Candidate / submitted / written | Result |
 |---|---|---:|---|

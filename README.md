@@ -93,13 +93,25 @@ policies/            One JSON file per policy definition, grouped by category
 initiatives/         enterprise-baseline.json (policy set definition)
 scripts/             Deploy, assign, unassign, undeploy, and validation tools
 examples/            Starter assignment parameter values
+infra/               Tenant-neutral retained-showcase Bicep fixture
 docs/DESIGN.md       Design decisions, sources, known limitations, rollout SOP
+docs/REPLICATE-*     Complete Policy + Automation replication runbook
 .github/workflows/   CI: validation on PRs and pushes to main
 ```
 
 Each policy file is a complete, self-describing definition: `displayName`,
 `description` (including *why* the control matters), semantic `version`,
 `mode`, declared `parameters`, and the `policyRule`.
+
+## Replicate the complete retained showcase
+
+The [Policy + Automation replication runbook](docs/REPLICATE-POLICY-AUTOMATION.md)
+starts from an empty resource group, stages this initiative in report-only
+mode, proves nonempty compliance state, promotes and remediates it, then adds
+the sibling Azure Backup Smart Tiering Automation canary. It finishes with the
+exact portal inspection surfaces and least-privilege state to leave alive, and
+uses tenant-neutral variables rather than checked-in subscription or principal
+identifiers.
 
 ## Custom baseline quickstart
 
@@ -158,8 +170,8 @@ Remove assignments before definitions so the managed identity's RBAC grants
 do not become orphaned:
 
 ```bash
-./scripts/unassign.sh --name enterprise-baseline --scope /subscriptions/<id>
-./scripts/undeploy.sh --subscription <id>
+./scripts/unassign.sh --name enterprise-baseline --scope "/subscriptions/<id>"
+./scripts/undeploy.sh --subscription "<id>"
 ```
 
 Resource-group assignments use the full RG resource ID as `--scope`. These
@@ -167,6 +179,12 @@ commands remove policy and RBAC objects; application resources remain under
 your normal lifecycle tooling.
 
 ## Live validation
+
+The latest joint qualification retained a resource-group-scoped Policy +
+Automation showcase after Policy report-only/enforcement/remediation and a
+fresh Automation audit/apply/idempotence cycle. Its tenant-neutral outcomes,
+least-privilege final state, and explicit limits are in
+[the 2026-08-31 joint validation record](docs/LIVE-TEST-2026-08-31-policy-automation.md).
 
 For Azure Files backup, begin with the Microsoft-first
 [enforcement guide](docs/GUIDE-file-share-backup-enforcement.md). It covers the
@@ -199,7 +217,8 @@ definitions on disk. The unit suite also exercises the Azure Files backup
 reconciler's subscription-aware item correlation, account-level vault
 registration, soft-delete and SMB/NFS handling, safety caps, and apply/wait
 behavior. Both checks run in GitHub Actions for pull requests and pushes to
-`main`; CI also syntax-checks every shell script and example JSON file.
+`main`; CI also runs the public-content privacy guard, compiles the retained
+Bicep fixture, and syntax-checks every shell script and example JSON file.
 
 ## Extending the baseline
 

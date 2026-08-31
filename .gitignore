@@ -2,3 +2,18 @@ __pycache__/
 *.tmp
 .DS_Store
 /my-params.json
+
+# Local Azure identity, rendered configuration, and private evidence
+.env*
+!.env.example
+.private/
+.generated/
+.azure/
+**/evidence/raw/
+**/raw-evidence/
+
+# State and terminal/browser captures can contain tenant-specific identifiers
+*.tfstate
+*.tfstate.*
+*.har
+*.cast

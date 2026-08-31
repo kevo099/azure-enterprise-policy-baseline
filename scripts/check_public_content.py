@@ -73,9 +73,7 @@ WINDOWS_HOME_RE = re.compile(
 # Split this literal so the checker does not identify its own rule definition.
 ROOT_HOME_RE = re.compile(r"(?<![A-Za-z0-9])/" + r"root(?:/|\b)")
 
-PRIVATE_KEY_RE = re.compile(
-    r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"
-)
+PRIVATE_KEY_RE = re.compile(r"(?i)-----BEGIN [A-Z0-9 -]*PRIVATE KEY-----")
 GITHUB_TOKEN_RE = re.compile(
     r"(?i)(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})"
 )
@@ -102,17 +100,18 @@ CLI_SECRET_RE = re.compile(
     r"[\"']?(?P<value>[^\s\"']{8,})"
 )
 
-PLACEHOLDER_MARKERS = (
-    "${",
-    "<",
-    "example",
-    "replace",
-    "redacted",
-    "dummy",
-    "changeme",
-    "your_",
-    "your-",
-    "***",
+SHELL_PLACEHOLDER_RE = re.compile(
+    r"^\$(?:[A-Za-z_][A-Za-z0-9_]*|\{[A-Za-z_][A-Za-z0-9_]*\})$"
+)
+ANGLE_PLACEHOLDER_RE = re.compile(r"^<[^<>\r\n]+>$")
+TEMPLATE_PLACEHOLDER_RE = re.compile(r"^\{\{[^{}\r\n]+\}\}$")
+SENTINEL_PLACEHOLDER_RE = re.compile(
+    r"(?i)^(?:"
+    r"(?:example|redacted|dummy|changeme|replace(?:[-_]?me)?)"
+    r"(?:[-_][a-z0-9]+)*"
+    r"|your(?:[-_][a-z0-9]+)+"
+    r"|\*{3,}"
+    r")$"
 )
 
 
@@ -161,9 +160,14 @@ def path_rules(relative: Path) -> set[str]:
 
 
 def is_placeholder(value: str) -> bool:
-    normalized = value.lower()
-    return value.startswith("$") or any(
-        marker in normalized for marker in PLACEHOLDER_MARKERS
+    return any(
+        regex.fullmatch(value)
+        for regex in (
+            SHELL_PLACEHOLDER_RE,
+            ANGLE_PLACEHOLDER_RE,
+            TEMPLATE_PLACEHOLDER_RE,
+            SENTINEL_PLACEHOLDER_RE,
+        )
     )
 
 

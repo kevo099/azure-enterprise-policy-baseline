@@ -9,9 +9,10 @@ window; that portion is recorded as inconclusive rather than passed.
 
 ## Scope and safety
 
-- Isolated resource group: `rg-afs-backup-e2e-20260825-c017a2` in East US 2.
-- Ownership tags: `Purpose=AzureFilesBackupE2E`, `CreatedBy=Codex`, and
-  `ExpiresAfter=2026-08-26`.
+- One newly created, uniquely named resource group in East US 2. Its
+  tenant-specific name is intentionally omitted.
+- Purpose, automation-owner, and expiry tags bounded the fixture lifecycle;
+  their environment-specific values are intentionally omitted.
 - One new Standard_LRS StorageV2 account, one new Recovery Services vault, and
   one daily/30-day Azure Files backup policy.
 - No pre-existing workload resource was selected or changed.
@@ -62,13 +63,15 @@ An on-demand backup was then completed for every test share. Azure listed one
 
 | Share | Backup job | Recovery point | UTC time |
 |---|---|---|---|
-| `data-default` | `5976f813-ee5f-4ee5-a82d-4db053b14165` | `1073196158495441` | 15:04:24 |
-| `data-smb` | `8980364a-edb1-422d-8af5-43035739cc9a` | `1077143594069783` | 15:09:40 |
-| `restore-target` | `2d95ff90-c1ac-4749-907d-3fbaa7ff5099` | `1084312972663714` | 15:09:51 |
+| `data-default` | Completed | `FileSystemConsistent` listed | 15:04:24 |
+| `data-smb` | Completed | `FileSystemConsistent` listed | 15:09:40 |
+| `restore-target` | Completed | `FileSystemConsistent` listed | 15:09:51 |
+
+Tenant-specific job and recovery-point identifiers are intentionally omitted.
 
 That recovery point was restored to the separately created
-`restore-target` share. Restore job
-`e56f97e6-d95b-4940-aed7-836fc133fea9` completed in 34 seconds. The restored
+`restore-target` share. The restore job completed in 34 seconds; its
+tenant-specific identifier is intentionally omitted. The restored
 `canary.txt` was 1,064 bytes and its SHA-256 matched the source exactly:
 
 ```text
@@ -104,13 +107,14 @@ then deployed successfully.
 ## Teardown
 
 Protection was stopped with backup-data deletion for all three shares. Azure
-reported these `DeleteBackupData` jobs `Completed`:
+reported these `DeleteBackupData` jobs `Completed`; tenant-specific job
+identifiers are intentionally omitted:
 
-| Share | Delete job |
+| Share | Delete job result |
 |---|---|
-| `data-default` | `981eed04-0cf9-4710-9d86-dae05a35508e` |
-| `data-smb` | `6b3badd4-0273-458c-8d42-29609771de7b` |
-| `restore-target` | `cbd0fce8-1b56-49c0-97df-d7a9e3762e49` |
+| `data-default` | Completed |
+| `data-smb` | Completed |
+| `restore-target` | Completed |
 
 The container then reported `SoftDeleted`/not registered. Both scoped Policy
 assignments and the temporary subscription definition were deleted before the
@@ -122,8 +126,8 @@ exact tagged resource group. Final **active-resource** verification returned:
 
 Azure soft-delete intentionally retained a recoverable deleted-vault record:
 
-- deleted-vault record:
-  `rg-afs-backup-e2e-20260825-c017a2_450f3f10-6dba-4c60-9eb3-53ea6ec6ec20`;
+- one deleted-vault record remained; its tenant-specific identifier is
+  intentionally omitted;
 - vault deletion time: `2026-08-25T15:17:00.754700+00:00`;
 - automatic purge time: `2026-09-08T15:11:49.537372+00:00`;
 - retained soft-deleted containers/items: `3`.

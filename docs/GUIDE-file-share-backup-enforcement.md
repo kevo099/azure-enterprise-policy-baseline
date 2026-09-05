@@ -18,6 +18,31 @@ behavior is required:
    Preview adoption is prohibited or an organization-owned initiative
    reference is required. Do not assign it alongside Microsoft's audit twin.
 
+## How to use this guide
+
+This is an adaptation guide for an **existing** storage/vault environment.
+For a complete fresh deployment, use the [Policy + Automation canary](REPLICATE-POLICY-AUTOMATION.md)
+first; that canary's intentionally unprotected share is a separate exercise.
+Use Bash on Linux or WSL from this repository's root. Replace every quoted
+`<placeholder>` and every placeholder embedded in an ARM ID before executing
+its block. Quoting makes a snippet valid Bash; it does not supply real values.
+
+After reviewing the prerequisites below, select your account explicitly:
+
+```bash
+az login
+az account list --query '[].{name:name,id:id,tenantId:tenantId}' --output table
+read -r -p 'Target subscription ID: ' SUB
+az account set --subscription "$SUB"
+az account show --query '{name:name,id:id,tenantId:tenantId}' --output table
+```
+
+**Check:** the subscription and tenant match the source and vault for this
+same-subscription example. Keep this Bash session for the rest of the guide.
+Run the inventory command first, inspect its result and exit status, then
+choose either bounded reconciliation or the separate Policy assignment path.
+Do not enable both paths on the same canary simultaneously while learning.
+
 ## Microsoft built-ins and templates — recommended first
 
 Use **`[Preview]: Configure backup for Azure Files Shares without a given tag
@@ -111,8 +136,8 @@ its schedule and retention before using it:
 
 ```bash
 az backup policy create \
-  --resource-group <backup-rg> \
-  --vault-name <recovery-services-vault> \
+  --resource-group "<backup-rg>" \
+  --vault-name "<recovery-services-vault>" \
   --name afs-daily \
   --backup-management-type AzureStorage \
   --workload-type AzureFileShare \
@@ -125,11 +150,11 @@ The script is dry-run by default and uses ARM inventory, not storage keys:
 
 ```bash
 python3 scripts/ensure_file_share_backup.py \
-  --source-resource-group <workload-rg> \
+  --source-resource-group "<workload-rg>" \
   --source-location eastus2 \
-  --vault-resource-group <backup-rg> \
-  --vault-name <recovery-services-vault> \
-  --policy-name <azure-files-policy>
+  --vault-resource-group "<backup-rg>" \
+  --vault-name "<recovery-services-vault>" \
+  --policy-name "<azure-files-policy>"
 ```
 
 An exit status of `2` means the run found work or a coverage blocker. Review
@@ -137,11 +162,11 @@ the table, then apply the same plan:
 
 ```bash
 python3 scripts/ensure_file_share_backup.py \
-  --source-resource-group <workload-rg> \
+  --source-resource-group "<workload-rg>" \
   --source-location eastus2 \
-  --vault-resource-group <backup-rg> \
-  --vault-name <recovery-services-vault> \
-  --policy-name <azure-files-policy> \
+  --vault-resource-group "<backup-rg>" \
+  --vault-name "<recovery-services-vault>" \
+  --policy-name "<azure-files-policy>" \
   --apply
 ```
 
@@ -185,10 +210,11 @@ means eligible SMB reconciliation completed but NFS shares remain unsupported.
 ## Continuous enforcement with Azure Policy
 
 The following illustrates the required assignment parameters. Start with a
-small canary resource group; the built-in remains Preview.
+small canary resource group; the built-in remains Preview. This example
+starts with `DoNotEnforce`, which still creates an assignment, identity and
+RBAC grants. It does not automatically enable protection until promoted.
 
 ```bash
-SUB=$(az account show --query id -o tsv)
 SCOPE="/subscriptions/$SUB/resourceGroups/<canary-rg>"
 POLICY_ID="/providers/Microsoft.Authorization/policyDefinitions/e159e079-0ddd-4905-97c9-79a8fca6d880"
 BACKUP_POLICY_ID="/subscriptions/$SUB/resourceGroups/<backup-rg>/providers/Microsoft.RecoveryServices/vaults/<vault>/backupPolicies/<azure-files-policy>"
@@ -201,6 +227,7 @@ PRINCIPAL_ID=$(az policy assignment create \
   --policy "$POLICY_ID" \
   --location eastus2 \
   --mi-system-assigned \
+  --enforcement-mode DoNotEnforce \
   --params "{\"effect\":{\"value\":\"DeployIfNotExists\"},\"vaultLocation\":{\"value\":\"eastus2\"},\"backupPolicyId\":{\"value\":\"$BACKUP_POLICY_ID\"},\"registerStorageAccount\":{\"value\":true},\"exclusionTagName\":{\"value\":\"\"},\"exclusionTagValue\":{\"value\":[]}}" \
   --query identity.principalId -o tsv)
 
@@ -222,14 +249,29 @@ scope and **Backup Contributor** at the target vault's **resource group**.
 For a cross-subscription Vault-Standard design, make that second assignment in
 the vault subscription and complete Microsoft's additional prerequisites.
 The two GUIDs in the example are those exact roles; retry only the role-create
-commands if new-principal propagation is still in progress. Then create a
-remediation task for shares that existed before the assignment:
+commands if new-principal propagation is still in progress. Before promoting,
+trigger a scan and inspect nonempty Policy state for this assignment at the
+canary RG; an empty result does not prove readiness. Review the eligible share
+inventory and Preview restrictions below. Then enable enforcement and request
+remediation for existing shares. A manual remediation is a write operation
+even when enforcement mode is `DoNotEnforce`.
 
 ```bash
+az policy state trigger-scan --resource-group "<canary-rg>"
+az policy state list --resource-group "<canary-rg>" \
+  --policy-assignment azure-files-backup-eus2 --output table
+```
+
+**Check:** the result contains the intended eligible canary resources. The next
+block enables automatic protection and starts the initial remediation:
+
+```bash
+az policy assignment update --name azure-files-backup-eus2 --scope "$SCOPE" \
+  --enforcement-mode Default
 az policy remediation create \
   --name azure-files-backup-eus2-initial \
   --policy-assignment azure-files-backup-eus2 \
-  --resource-group <canary-rg>
+  --resource-group "<canary-rg>"
 ```
 
 New ARM-created shares are evaluated asynchronously after creation. This is
@@ -241,6 +283,25 @@ The existing-vault built-ins support subscription and resource-group scope,
 not management-group assignment. Use one assignment per source
 subscription/location/target-policy combination. The sample intentionally
 keeps the source, vault, and policy in the same subscription.
+
+## Check completion and finish
+
+After the initial task is accepted, inspect **Policy → Remediation** for its
+terminal result and failed deployments, then the target vault's **Backup jobs**
+and **Backup items**. A successful deployment or `INITIAL_RECOVERY_PENDING`
+is not evidence of a recovery point. Re-run the inventory and require the
+intended share states; perform a restore test before claiming recovery works.
+The reconciler's documented exit codes below its examples are intentional;
+exit `2` during audit is a result to inspect, not a reason to blindly retry.
+
+When retiring the canary assignment, first stop any active remediation and
+wait for it to finish. Record the two exact role-assignment IDs that this
+exercise created, remove those grants from its managed identity, then remove
+`azure-files-backup-eus2` at `$SCOPE`. Do not remove grants you did not create.
+Policy removal does not stop backup or remove recovery points. Use Microsoft's
+[Recovery Services vault deletion procedure](https://learn.microsoft.com/en-us/azure/backup/backup-azure-delete-vault)
+for separately owned disposable vaults; retention and soft delete can block
+immediate deletion. This guide does not authorize deletion of existing data.
 
 ## Important boundaries
 

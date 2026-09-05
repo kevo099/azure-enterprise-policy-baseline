@@ -4,6 +4,30 @@ This is the custom-fallback guide. Start with Microsoft-managed built-in
 policies and Microsoft-published templates; use the repository definition only
 when you deliberately need a pinned, organization-owned rule.
 
+## Before running commands
+
+Use Bash on Linux or WSL from the root of a cloned copy of this repository.
+Read [the prerequisites](#prerequisites) first. Choose **one** audit assignment
+path: the Microsoft built-in below, or custom Option B. Option A is the separate
+full-baseline exercise. These assignments are real Azure writes; they do not
+enable backup. Steps 4–5 of verification separately enable billable protection.
+
+```bash
+az login
+az account list --query '[].{name:name,id:id,tenantId:tenantId}' --output table
+read -r -p 'Target subscription ID: ' SUB
+az account set --subscription "$SUB"
+az account show --query '{name:name,id:id,tenantId:tenantId}' --output table
+read -r -p 'Existing canary resource group name: ' CANARY_RG
+az group show --subscription "$SUB" --name "$CANARY_RG" --output table
+SCOPE="/subscriptions/$SUB/resourceGroups/$CANARY_RG"
+```
+
+**Check:** the account, tenant, and canary RG are correct before continuing.
+Keep command output private. Replace every quoted `<placeholder>` below with
+your reviewed value; the quotes prevent Bash interpreting placeholders as
+redirection, but placeholder strings themselves are not deployable names.
+
 ## Recommended starting point
 
 For report-only coverage, prefer Microsoft's Preview audit definition:
@@ -15,12 +39,12 @@ cfc5190a-3b19-4a23-b563-a4c719b666e4
 Assign the built-in directly; it needs no managed identity or role grants:
 
 ```bash
-SUB=$(az account show --query id -o tsv)
+AUDIT_ASSIGNMENT="azure-files-backup-audit"
 az policy assignment create \
-  --name azure-files-backup-audit \
+  --name "$AUDIT_ASSIGNMENT" \
   --display-name "Audit Azure Files backup coverage" \
   --policy "/providers/Microsoft.Authorization/policyDefinitions/cfc5190a-3b19-4a23-b563-a4c719b666e4" \
-  --scope "/subscriptions/$SUB/resourceGroups/<canary-rg>"
+  --scope "$SCOPE"
 ```
 
 For automatic protection, prefer the existing-vault, tag-exclusion
@@ -125,43 +149,42 @@ not supported at management-group scope.)
 
 ## Option A — deploy the whole baseline
 
-The policy ships as #13 in the initiative, so the standard repo flow picks it
-up automatically:
-
-```bash
-# 1. Publish all 16 definitions + the initiative at subscription scope
-./scripts/deploy.sh
-
-# 2. Assign the initiative (start from examples/assignment-params.example.json)
-./scripts/assign.sh --params my-params.json \
-  --scope "/subscriptions/<sub-id>"          # omit --scope for current sub
-```
+The policy ships as #13 in the initiative. Use sections 1–5 of
+[the complete canary guide](REPLICATE-POLICY-AUTOMATION.md), which creates the
+workspace and private parameters, assigns report-only at an explicit RG scope,
+and checks remediation. Do not use the scripts' implicit subscription scope
+for this exercise. Its remaining file-share finding is deliberate; do not add
+the built-in audit assignment on top of it.
 
 `effectFileShareBackup` defaults to `AuditIfNotExists`; set it to `Disabled`
 in your params file to switch the policy off without touching the initiative.
 
 ## Option B — deploy just this policy standalone
 
+The create commands upsert fixed names. Check Policy → Definitions and
+Assignments for an existing same-name object first; reuse only after reviewing
+its contents and ownership. The standalone audit needs no managed identity.
+
 ```bash
-SUB=$(az account show --query id -o tsv)
+AUDIT_ASSIGNMENT="fileshare-backup-audit"
 POLICY=policies/operations/audit-file-share-backup-protection.json
 
 # 1. Create the definition at subscription scope (fields read from the JSON
 #    so this recipe cannot drift from the definition)
 az policy definition create \
-  --name "$(jq -r .name $POLICY)" \
-  --display-name "$(jq -r .properties.displayName $POLICY)" \
-  --description "$(jq -r .properties.description $POLICY)" \
-  --mode "$(jq -r .properties.mode $POLICY)" \
+  --name "$(jq -r .name "$POLICY")" \
+  --display-name "$(jq -r .properties.displayName "$POLICY")" \
+  --description "$(jq -r .properties.description "$POLICY")" \
+  --mode "$(jq -r .properties.mode "$POLICY")" \
   --metadata "$(jq -c .properties.metadata "$POLICY")" \
-  --rules "$(jq -c .properties.policyRule $POLICY)" \
-  --params "$(jq -c .properties.parameters $POLICY)"
+  --rules "$(jq -c .properties.policyRule "$POLICY")" \
+  --params "$(jq -c .properties.parameters "$POLICY")"
 
 # 2. Assign it (example: one resource group)
 az policy assignment create \
-  --name fileshare-backup-audit \
+  --name "$AUDIT_ASSIGNMENT" \
   --policy audit-file-share-backup-protection \
-  --scope "/subscriptions/$SUB/resourceGroups/<your-rg>"
+  --scope "$SCOPE"
 ```
 
 ## Step-by-step: verify it works
@@ -169,8 +192,8 @@ az policy assignment create \
 1. **Create a storage account and an SMB share** (or use an existing one):
 
    ```bash
-   az storage account create -n <account> -g <your-rg> -l <region> --sku Standard_LRS
-   az storage share-rm create --storage-account <account> -g <your-rg> -n data01
+   az storage account create -n "<account>" -g "$CANARY_RG" -l "<region>" --sku Standard_LRS
+   az storage share-rm create --storage-account "<account>" -g "$CANARY_RG" -n data01
    ```
 
 2. **Wait for the new assignment to propagate** (a fresh policy assignment
@@ -178,29 +201,30 @@ az policy assignment create \
    on-demand compliance scan** — otherwise you wait for the ~24-hour cycle:
 
    ```bash
-   az policy state trigger-scan -g <your-rg>   # blocks; takes several minutes
+   az policy state trigger-scan -g "$CANARY_RG"   # blocks; takes several minutes
    ```
 
 3. **Read the verdict:**
 
    ```bash
-   az policy state list -g <your-rg> \
-     --filter "policyDefinitionName eq 'audit-file-share-backup-protection'" \
+   az policy state list -g "$CANARY_RG" \
+     --policy-assignment "$AUDIT_ASSIGNMENT" \
      --query "[].{resource:resourceId, state:complianceState}" -o table
    ```
 
-   The unprotected share shows `NonCompliant`. The same result appears in
+   The unprotected share shows `NonCompliant`. An empty result is inconclusive;
+   wait and scan again before claiming a result. The same result appears in
    Portal → Policy → Compliance. (The share may also show up as a
    protectable resource in the protection-inventory views under **Resiliency
    in Azure**, the successor to Azure Business Continuity Center — that is a
    separate observation, not this policy's compliance result.)
 
-4. **Protect the share.** A fresh Recovery Services vault has no Azure
+4. **Optional: protect the empty test share.** A fresh Recovery Services vault has no Azure
    Files (AzureStorage-workload) backup policy, so create one first —
    `DefaultPolicy` in a new vault is the *VM* policy and will not work here:
 
    ```bash
-   az backup vault create -n <vault> -g <your-rg> -l <region>
+   az backup vault create -n "<vault>" -g "$CANARY_RG" -l "<region>"
 
    # Create an AzureStorage-workload backup policy (daily, 30-day retention)
    cat > afs-policy.json <<'EOF'
@@ -224,19 +248,19 @@ az policy assignment create \
      }
    }
    EOF
-   az backup policy create --vault-name <vault> -g <your-rg> \
+   az backup policy create --vault-name "<vault>" -g "$CANARY_RG" \
      --name afs-daily --backup-management-type AzureStorage --policy afs-policy.json
 
    az backup protection enable-for-azurefileshare \
-     --vault-name <vault> -g <your-rg> \
-     --storage-account <account> --azure-file-share data01 --policy-name afs-daily
+     --vault-name "<vault>" -g "$CANARY_RG" \
+     --storage-account "<account>" --azure-file-share data01 --policy-name afs-daily
    ```
 
    Configure-backup is **asynchronous** — confirm the job finished before
    rescanning:
 
    ```bash
-   az backup job list --vault-name <vault> -g <your-rg> \
+   az backup job list --vault-name "<vault>" -g "$CANARY_RG" \
      --query "[].{op:properties.operation, status:properties.status}" -o table
    # wait until ConfigureBackup shows Completed
    ```
@@ -244,6 +268,24 @@ az policy assignment create \
 5. **Re-scan and confirm `Compliant`** — repeat steps 2–3. Enabling backup is
    a Backup-RP operation, not a write to the share, so the flip only shows up
    after a scan (or the daily cycle).
+
+## Finish the exercise
+
+For the built-in or standalone custom path, remove only the selected audit
+assignment when finished:
+
+```bash
+az policy assignment delete --name "$AUDIT_ASSIGNMENT" --scope "$SCOPE"
+```
+
+A full-baseline assignment owns remediation-role grants; use the complete
+guide's `unassign.sh` cleanup instead. Definition removal needs a separate
+check for other assignments using that definition. Removing an audit assignment
+does not stop protection or delete storage/vault resources. If you followed the
+optional backup steps, use the vault's protected-item inventory and Microsoft's
+[Recovery Services vault deletion procedure](https://learn.microsoft.com/en-us/azure/backup/backup-azure-delete-vault)
+to remove only your disposable fixtures; retained and soft-deleted backup data
+can prevent deletion. Keep existing workloads and their recovery points.
 
 ## How the existence check actually works
 

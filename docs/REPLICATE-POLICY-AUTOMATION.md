@@ -70,7 +70,7 @@ The last joint live qualification used these public sources:
 |---|---|
 | Policy definitions, initiative, and lifecycle scripts | `kevo099/azure-enterprise-policy-baseline` commit `d07fe194b46a4b1df9f20e04f6454dc1f3f81148` |
 | Automation runbook and fixture used in the live qualification | `kevo099/azure-backup-smart-tiering-automation` commit `67ecfe0f5a3bebbac472fc629aa1911846180056` |
-| Propagation-safe replication helpers used by this guide | `kevo099/azure-backup-smart-tiering-automation` commit `1abbdcc066d58d9fb765d78fff3763ee34acf97a` |
+| Propagation-safe replication helpers with byte-preserving publication | `kevo099/azure-backup-smart-tiering-automation` commit `03839a29b0fff02442d88a414d7ac32851d227c7` |
 | Published Automation runbook | SHA-256 `2cef45acc81b04a6bbcd62582db6f974102ae98f2de79231a90907f49a7dd555` |
 
 The Policy showcase Bicep in this guide was sanitized from the live fixture. It
@@ -158,7 +158,7 @@ WORK_ROOT="$(mktemp -d)"
 POLICY_DIR="$WORK_ROOT/azure-enterprise-policy-baseline"
 AUTOMATION_DIR="$WORK_ROOT/azure-backup-smart-tiering-automation"
 QUALIFIED_POLICY_CORE="d07fe194b46a4b1df9f20e04f6454dc1f3f81148"
-AUTOMATION_REF="1abbdcc066d58d9fb765d78fff3763ee34acf97a"
+AUTOMATION_REF="03839a29b0fff02442d88a414d7ac32851d227c7"
 EXPECTED_RUNBOOK_SHA="2cef45acc81b04a6bbcd62582db6f974102ae98f2de79231a90907f49a7dd555"
 EXPECTED_POLICY_FIXTURE_SHA="ee6a382443881993fea49ef25f9c6c89ecaff38addb1faa04180b22fc5f0eaad"
 
@@ -566,17 +566,26 @@ verify resource state independently of Policy's summary:
 ```bash
 wait_for_final_policy_state() {
   local state_file="$PRIVATE_WORK/policy-final.json"
+  local required_ids_json
+  required_ids_json="$(jq -cn --args '$ARGS.positional' "$@")"
   for _ in $(seq 1 40); do
     az policy state list \
       --subscription "$SUBSCRIPTION_ID" \
       --resource-group "$RESOURCE_GROUP" \
       --policy-assignment "$POLICY_ASSIGNMENT" \
       --output json >"$state_file"
-    if jq -e '
+    if jq -e --argjson requiredIds "$required_ids_json" '
+      def norm: ascii_downcase | sub("/$"; "");
+      . as $states |
       ([.[] | select(.policyDefinitionReferenceId == "inherit-tag-from-resource-group")] | length) > 0 and
       ([.[] | select(.policyDefinitionReferenceId == "inherit-tag-from-resource-group" and .complianceState != "Compliant")] | length) == 0 and
       ([.[] | select(.policyDefinitionReferenceId == "deploy-keyvault-diagnostics" and .complianceState == "Compliant")] | length) == 1 and
-      ([.[] | select(.policyDefinitionReferenceId == "audit-file-share-backup-protection" and .complianceState == "NonCompliant")] | length) == 1
+      ([.[] | select(.policyDefinitionReferenceId == "audit-file-share-backup-protection" and .complianceState == "NonCompliant")] | length) == 1 and
+      all($requiredIds[]; . as $id
+        | any($states[];
+            .policyDefinitionReferenceId == "inherit-tag-from-resource-group" and
+            .complianceState == "Compliant" and
+            (((.resourceId // "") | norm) == ($id | norm))))
     ' "$state_file" >/dev/null; then
       return 0
     fi
@@ -699,11 +708,30 @@ with `LOCATION` set, the pinned helper uses that supplied value. If it is
 unset, the helper discovers the account region. Keep the value aligned with
 the account created in the preceding block.
 
+The current helper uploads draft content with a binary HTTP body and verifies
+both draft and published hashes. Azure CLI 2.90.0 strips trailing line endings
+when expanding `--content @file` or `--body @file`; that changed the qualified
+runbook's bytes during this replication test. Keep the helper pin above rather
+than substituting either file-expansion command. See the
+[standalone publication test record](https://github.com/kevo099/azure-backup-smart-tiering-automation/blob/aa2c203c0a4fe645b03120f1ca341307362f3d7b/docs/LIVE-TEST-2026-09-06.md)
+for the observed failure and corrected result.
+
+Starting a runbook creates a job before a worker starts its script. Keep the
+returned job ID and poll that same job to a terminal state. The guide's
+15-minute windows are local test bounds; Microsoft's startup troubleshooting
+page describes a 30-minute service target. A local timeout remains incomplete
+evidence: reconcile the saved job before continuing, and do not launch another
+writer while it may still run. [Job lifecycle](https://learn.microsoft.com/en-us/azure/automation/automation-runbook-execution#job-statuses),
+[Automation startup timing](https://learn.microsoft.com/en-us/troubleshoot/azure/automation/runbooks/job-not-start-as-expected)
+
 An optional audit job before reader RBAC should fail before the runbook's
 result phase. Depending on identity visibility, that can be token/context
 initialization or the first vault-list authorization. **No `SUMMARY` is
 expected**, and the policy must remain `TierRecommended`. This is safe but not needed
-for the positive qualification.
+for the positive qualification. Preserve job metadata and both Output and Error
+streams: an initialization failure can populate `properties.exception` while
+its Error stream is empty. Job GET also exposes `statusDetails` and `startTime`.
+Missing output alone is not a diagnosis. [Job GET reference](https://learn.microsoft.com/en-us/rest/api/automation/job/get?view=rest-automation-2024-10-23)
 
 Define the exact ARM surfaces, then grant the Automation identity only the
 RG-scoped discovery reader:
@@ -717,6 +745,12 @@ SUBSCRIPTION_POLICY_URL="$ARM/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RES
 scripts/discovery-role.sh grant \
   "$SUBSCRIPTION_ID" "$RESOURCE_GROUP" "$AUTOMATION_PRINCIPAL"
 ```
+
+A visible role assignment does not prove effective access. Microsoft documents
+that role changes can take up to 10 minutes to propagate. Prove the actual
+discovery path with the reader job below; do not broaden permissions or treat
+every HTTP 403 as propagation. Later writer retries remain limited to the
+explicit summary and unchanged-state checks in section 7. [RBAC propagation](https://learn.microsoft.com/en-us/azure/role-based-access-control/troubleshooting#symptom---role-assignment-changes-are-not-being-detected)
 
 Do not guess when RBAC has propagated. Run a bounded, read-only exact-name
 audit against the still-compliant `TierRecommended` policy until the managed
@@ -1216,7 +1250,10 @@ az policy state trigger-scan \
   --subscription "$SUBSCRIPTION_ID" \
   --resource-group "$RESOURCE_GROUP" \
   --no-wait
-wait_for_final_policy_state
+wait_for_final_policy_state \
+  "$AUTOMATION_RESOURCE_ID" \
+  "$RG_VAULT_RESOURCE_ID" \
+  "$SUBSCRIPTION_VAULT_RESOURCE_ID"
 
 jq -e \
   --arg automation "$AUTOMATION_RESOURCE_ID" \
@@ -1497,6 +1534,13 @@ Deleting the RG soft-deletes the purge-protected Key Vault; its name remains
 reserved until its retention period expires. Purge protection cannot be
 overridden by an administrator; use a fresh name for another exercise. See
 [Microsoft's Key Vault recovery guidance](https://learn.microsoft.com/en-us/azure/key-vault/general/key-vault-recovery).
+
+Normal group deletion also soft-deletes the Log Analytics workspace for a
+14-day recovery period and reserves its name. Record this separately from group
+absence and the Key Vault tombstone. Data purge follows the recovery period;
+this cleanup does not require workspace recovery or permanent deletion. Use a
+fresh workspace name for another temporary exercise. [Workspace deletion and recovery](https://learn.microsoft.com/en-us/azure/azure-monitor/logs/delete-workspace)
+
 The subscription definitions and
 initiative intentionally remain. Remove them only after a separate inventory
 proves byte identity, exclusive ownership, and zero assignments at every scope.

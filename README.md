@@ -13,9 +13,9 @@ disciplines, and Microsoft-published templates. A custom implementation is an
 explicit fallback or extension, not the default merely because it is included
 here.
 
-The custom baseline deploys and tears down with small shell scripts (`az` +
-`jq` are the only dependencies), and a stdlib-only Python validator keeps the
-JSON honest in CI.
+The custom baseline deploys and tears down with Bash scripts using Azure CLI,
+`jq`, and standard Unix utilities. A stdlib-only Python validator checks the
+JSON in CI.
 
 > This is a community project. It is not affiliated with or endorsed by
 > Microsoft.
@@ -119,64 +119,63 @@ Use this flow only after deciding that the repository-owned initiative is the
 right fit. For Azure Files backup, follow the Microsoft-first recommendation
 above before deploying the custom fallback.
 
+**Goal:** review the repository locally, then deploy one isolated canary through
+the complete guide. Use Bash 4+ on Linux or WSL. These blocks are Bash,
+including the commands that later invoke
+PowerShell. Have Git, Python 3.10+, Azure CLI, and `jq` installed.
+
+**Do:** clone the repository and run the offline checks. If you already have a
+checkout, change into its root and begin at the validation commands.
+
 ```bash
-az login
-
-# 1. Publish the 16 definitions + initiative
-#    (current subscription by default, or -m <management-group-id>)
-./scripts/deploy.sh
-
-# 2. Set your organization's values
-cp examples/assignment-params.example.json my-params.json
-$EDITOR my-params.json   # allowed regions/SKUs, Log Analytics workspace, tag name
-
-# 3. Assign — start in report-only mode
-./scripts/assign.sh --params my-params.json --dry-run
+git clone https://github.com/kevo099/azure-enterprise-policy-baseline.git
+cd azure-enterprise-policy-baseline
+git rev-parse HEAD
+python3 scripts/validate.py
+python3 -m unittest discover -s tests -v
+python3 scripts/check_public_content.py
+for script in scripts/*.sh; do bash -n "$script" || exit 1; done
+jq empty examples/*.json
 ```
 
-`assign.sh` creates the assignment with a system-assigned managed identity and
-grants it the roles the Modify/DeployIfNotExists policies need. Contributor and
-Monitoring Contributor are scoped to the assignment; Log Analytics Contributor
-is scoped to the selected workspace, even when that workspace is in another
-resource group. The script is idempotent and exits nonzero if any required role
-grant fails. `my-params.json` is gitignored so real subscription IDs stay out of
-the repo.
+**Check:** the validator and privacy guard report success, the unit suite ends
+with `OK`, and the shell/JSON checks produce no errors. These checks create no
+Azure resources and do not prove Azure permissions or service availability.
 
-### Recommended rollout
+**Next:** follow [the complete Policy + Automation runbook](docs/REPLICATE-POLICY-AUTOMATION.md)
+from section 1. It selects the subscription explicitly, establishes permissions,
+creates the workspace, renders real parameters privately, and checks for
+definition-name collisions before publishing. For a Policy-only exercise,
+complete sections 1–5 and use that guide's cleanup instructions when finished;
+sections 6–8 add and verify Automation. The resource group remains billable
+until removed. Use the stage table to track your place.
 
-1. **Assign with `--dry-run`** (`enforcementMode: DoNotEnforce`). Compliance is
-   evaluated and reported, nothing is blocked yet.
-2. **Review the compliance dashboard** for a week:
-   `az policy state summarize --policy-assignment enterprise-baseline`
-3. **Remediate existing resources** where it's automatic:
-   ```bash
-   az policy remediation create --name inherit-tags \
-     --policy-assignment enterprise-baseline \
-     --definition-reference-id inherit-tag-from-resource-group
-   az policy remediation create --name kv-diagnostics \
-     --policy-assignment enterprise-baseline \
-     --definition-reference-id deploy-keyvault-diagnostics
-   ```
-4. **Re-assign without `--dry-run`** once the estate is clean. For a gentler
-   path, flip individual effects to `Audit` in your params file and promote
-   them to `Deny` one at a time.
+### Understand the assignment before running it
 
-Exemptions for legitimate exceptions (that one NVA that genuinely needs a
-public IP) belong in `az policy exemption create` — not in weakened policy.
+`assign.sh --dry-run` **writes to Azure**: it creates an assignment with
+`enforcementMode: DoNotEnforce`, a system-assigned identity, and three RBAC
+grants. The mode suppresses automatic enforcement; a manually requested
+remediation task still changes resources. See Microsoft's
+[enforcement-mode documentation](https://learn.microsoft.com/en-us/azure/governance/policy/concepts/assignment-structure#enforcement-mode).
+
+Contributor and Monitoring Contributor go to the assignment scope; Log
+Analytics Contributor goes to the selected workspace. The script exits nonzero
+if a required grant fails, but the assignment may already exist. Keep the
+output private and use the guide's recovery instructions.
+
+The default script scope is the entire current subscription. Always pass the
+reviewed `--scope`, `--name`, and parameter file explicitly. Broader rollout
+belongs in [the design and rollout SOP](docs/DESIGN.md); the canary is the
+starting point for learning and validation.
 
 ### Clean removal
 
-Remove assignments before definitions so the managed identity's RBAC grants
-do not become orphaned:
-
-```bash
-./scripts/unassign.sh --name enterprise-baseline --scope "/subscriptions/<id>"
-./scripts/undeploy.sh --subscription "<id>"
-```
-
-Resource-group assignments use the full RG resource ID as `--scope`. These
-commands remove policy and RBAC objects; application resources remain under
-your normal lifecycle tooling.
+Use [the owned-scope cleanup](docs/REPLICATE-POLICY-AUTOMATION.md#11-optional-cleanup)
+for the canary. It removes role grants before identities and resource deletion,
+and verifies that the resource group belongs to this exercise. It deliberately
+retains the cost-free subscription definitions and initiative: other scopes
+may have started using them. `undeploy.sh` removes those shared objects and
+requires a separate ownership and assignment inventory before use.
 
 ## Live validation
 

@@ -16,6 +16,29 @@ This is a canary procedure, not authorization to assign the initiative across
 an existing subscription. Keep the Policy assignment, custom-role assignments,
 and Automation write window at the new resource group.
 
+## Read this first
+
+Follow the numbered sections in order in one dedicated Bash terminal. Run one
+block, check its result, then continue. Successful assertions are usually silent;
+a nonzero command or a failed `test` means stop at that section. Do not paste the
+whole document into a script: cleanup and recovery are separate choices.
+
+| Stage | Goal | Check before continuing |
+|---|---|---|
+| [1–2](#1-prerequisites) | Validate sources and choose the destination | Tests pass, hashes match, selected subscription/tenant are correct, private recovery file exists |
+| [3–4](#3-create-the-owned-scope-and-capped-workspace) | Build the Policy canary in report-only mode | Owned RG and workspace exist; nonempty Policy state reports the three intended findings |
+| [5](#5-promote-remediate-and-independently-verify-policy) | Enforce and repair the canary | Tags and diagnostics pass direct checks; one empty-share audit finding remains |
+| [6](#6-deploy-the-fresh-automation-canary-once) | Publish Automation and prepare one empty policy | Published bytes match; reader-only audit passes; exact empty canary is `DoNotTier` |
+| [7](#7-run-audit-bounded-apply-and-idempotence) | Exercise one bounded write | Audit/apply/repeat show `1/0/0`, `1/1/1`, `0/0/0`; writer is revoked |
+| [8–9](#8-prove-final-invariants) | Verify and retain the showcase | Final resource, job, Policy, and RBAC assertions pass; inspect the portal |
+| [11](#11-optional-cleanup) | Remove the owned resources when finished | RG deletion completes; cost-free subscription definitions intentionally remain |
+
+Budget an uninterrupted session. Policy-state polls allow 20 minutes, each
+remediation poll allows 30 minutes, and Automation propagation can add another
+15 minutes per gate. A timeout is an incomplete result. See
+[interruption recovery](#if-the-session-stops) before retrying a write. For a
+Policy-only exercise, stop after section 5 and use section 11 for cleanup.
+
 ## What this creates
 
 ```text
@@ -81,9 +104,11 @@ commits/hashes, counts, semantic outcomes, and stated limitations.
 
 ## 1. Prerequisites
 
-You need Bash 4 or newer, Git, `curl`, `jq`, GNU coreutils (`sha256sum` and
-`sort -V`), Azure CLI 2.75.0 or newer with Bicep, Python 3, and optionally
-PowerShell 7.4 for the Automation behavioral harness. The procedure pins the
+You need Linux or WSL with Bash 4 or newer, Git, `curl`, `jq`, GNU coreutils
+(`sha256sum` and `sort -V`), Azure CLI 2.75.0 or newer with Bicep, Python 3.10+
+and PowerShell 7.4+ for the Automation validation. The Automation helpers also
+read Linux's `/proc/sys/kernel/random/uuid`; native macOS Bash alone is not
+sufficient. Use Bash even when a block invokes `pwsh`. The procedure pins the
 experimental `automation` extension to the qualified `1.0.0b2` command
 surface.
 
@@ -93,13 +118,22 @@ The operator needs:
   register them first;
 - Resource Policy Contributor-equivalent rights at the subscription for the
   custom definitions and initiative;
-- Contributor-equivalent resource rights at the new resource group; and
-- `Microsoft.Authorization/roleAssignments/write` and
-  `Microsoft.Authorization/roleDefinitions/write` at only the new resource
-  group for the two managed identities' roles.
+- permission to create a resource group at the subscription
+  (`Microsoft.Resources/subscriptions/resourceGroups/write`), then
+  Contributor-equivalent resource rights at that new group; and
+- role-assignment and custom-role **read, write, and delete** permissions at
+  the new RG, including `Microsoft.Authorization/roleAssignments/*` and
+  `Microsoft.Authorization/roleDefinitions/*`. User Access Administrator,
+  Owner, or a suitably scoped custom role can supply these. RBAC Administrator
+  alone cannot create the custom role definitions used here.
 
 Using subscription Owner is simpler but broader than this canary requires.
-Use temporary elevation and remove it after the role assignments exist.
+Arrange narrow grants with the platform owner before section 3; a grant at an
+RG that does not yet exist cannot itself authorize RG creation. Keep temporary
+RBAC elevation through the section 7 writer revoke and section 8 verification,
+then remove it. Reacquire it for cleanup. Removing access immediately after
+the first role grant prevents later grants or their revocation. Microsoft lists
+the available actions in its [privileged role definitions](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/privileged).
 
 Run every shell block in this document in **one Bash session**. Start fail-fast
 and make every locally rendered file private, then clone both repositories into
@@ -108,6 +142,17 @@ a disposable working directory:
 ```bash
 set -euo pipefail
 umask 077
+
+test "${BASH_VERSINFO[0]}" -ge 4
+test -r /proc/sys/kernel/random/uuid
+for command_name in git curl jq sha256sum python3 az pwsh; do
+  command -v "$command_name" >/dev/null
+done
+python3 -c 'import sys; assert sys.version_info >= (3, 10)'
+pwsh -NonInteractive -NoProfile -Command 'if ($PSVersionTable.PSVersion -lt [version]"7.4") { exit 1 }'
+AZ_CLI_VERSION="$(az version --query '"azure-cli"' -o tsv)"
+test "$(printf '%s\n' 2.75.0 "$AZ_CLI_VERSION" | sort -V | head -1)" = "2.75.0"
+az bicep version
 
 WORK_ROOT="$(mktemp -d)"
 POLICY_DIR="$WORK_ROOT/azure-enterprise-policy-baseline"
@@ -140,21 +185,24 @@ Validate before signing in to Azure:
 cd "$POLICY_DIR"
 python3 scripts/validate.py
 python3 -m unittest discover -s tests -v
-bash -n scripts/*.sh
+python3 scripts/check_public_content.py
+for script in scripts/*.sh; do bash -n "$script"; done
 jq empty examples/*.json
 az bicep build --file infra/policy-showcase.bicep --stdout >/dev/null
 
 cd "$AUTOMATION_DIR"
 pwsh -NonInteractive -NoProfile -File tests/StaticValidation.ps1
 pwsh -NonInteractive -NoProfile -File tests/BehaviorHarness.ps1
-bash -n scripts/*.sh
+for script in scripts/*.sh; do bash -n "$script"; done
 az bicep build --file infra/test-environment.bicep --stdout >/dev/null
 ACTUAL_RUNBOOK_SHA="$(sha256sum src/Enable-SmartTiering.ps1 | cut -d' ' -f1)"
 test "$ACTUAL_RUNBOOK_SHA" = "$EXPECTED_RUNBOOK_SHA"
 ```
 
-If PowerShell is unavailable, record that the behavioral harness was not run;
-do not silently call the validation complete.
+**Check:** both repositories' tests pass, each Bicep compilation succeeds, and
+the runbook hash matches. Install missing tools before continuing. The local
+`pwsh` tests use mocks; they do not sign in or create Azure resources. The
+deployed runbook still uses the pinned Azure PowerShell 7.4 runtime.
 
 ## 2. Sign in and choose fresh names
 
@@ -163,13 +211,21 @@ in these repositories.
 
 ```bash
 az login
-AZ_CLI_VERSION="$(az version --query '"azure-cli"' -o tsv)"
-test "$(printf '%s\n' 2.75.0 "$AZ_CLI_VERSION" | sort -V | head -1)" = "2.75.0"
 az extension add --name automation --version 1.0.0b2 --upgrade --yes
 test "$(az extension show --name automation --query version -o tsv)" = "1.0.0b2"
-SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+az account list --query '[].{name:name,id:id,tenantId:tenantId,state:state}' --output table
+read -r -p 'Target subscription ID from the table: ' SUBSCRIPTION_ID
+test -n "$SUBSCRIPTION_ID"
 az account set --subscription "$SUBSCRIPTION_ID"
+test "$(az account show --query id -o tsv)" = "$SUBSCRIPTION_ID"
+az account show --query '{name:name,id:id,tenantId:tenantId,state:state}' --output table
+```
 
+**Check:** the displayed subscription and tenant are the intended destination.
+If either is wrong, select the correct account before the next block. Azure CLI
+commands in this guide use the selected public-Azure subscription.
+
+```bash
 PRIMARY_LOCATION="eastus2"
 AUTOMATION_LOCATION="centralus"
 DEPLOYMENT_SUFFIX="$(printf '%08x' "$(((RANDOM << 16) | RANDOM))")"
@@ -190,6 +246,29 @@ BACKUP_POLICY="smart-tiering-showcase-canary"
 
 POLICY_SCOPE="/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP"
 PRIVATE_WORK="$(mktemp -d)"
+POLICY_PARAMS="$PRIVATE_WORK/assignment-params.json"
+AUTOMATION_PRINCIPAL=""
+
+# Persist operator inputs outside both repos and the temporary evidence.
+# The file contains private resource IDs/names, but no credentials or tokens.
+RECOVERY_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}/azure-policy-automation"
+mkdir -p -m 700 "$RECOVERY_ROOT"
+SESSION_FILE="$RECOVERY_ROOT/$DEPLOYMENT_SUFFIX.env"
+test ! -e "$SESSION_FILE"
+save_showcase_session() {
+  local variable
+  for variable in WORK_ROOT POLICY_DIR AUTOMATION_DIR POLICY_REF AUTOMATION_REF \
+    SUBSCRIPTION_ID PRIMARY_LOCATION AUTOMATION_LOCATION DEPLOYMENT_SUFFIX \
+    RESOURCE_GROUP WORKSPACE_NAME STORAGE_ACCOUNT_NAME KEY_VAULT_NAME \
+    VIRTUAL_NETWORK_NAME NETWORK_SECURITY_GROUP_NAME NETWORK_INTERFACE_NAME \
+    POLICY_ASSIGNMENT AUTOMATION_ACCOUNT RG_VAULT SUBSCRIPTION_VAULT \
+    BACKUP_POLICY POLICY_SCOPE PRIVATE_WORK POLICY_PARAMS AUTOMATION_PRINCIPAL; do
+    printf '%s=%q\n' "$variable" "${!variable}"
+  done >"$SESSION_FILE"
+  chmod 600 "$SESSION_FILE"
+}
+save_showcase_session
+printf 'Keep this private recovery file until teardown: %s\n' "$SESSION_FILE"
 ```
 
 `AUTOMATION_LOCATION` must be allowed by Policy before the Automation fixture
@@ -599,6 +678,7 @@ AUTOMATION_PRINCIPAL="$(az automation account show \
   --name "$AUTOMATION_ACCOUNT" \
   --query identity.principalId -o tsv)"
 test -n "$AUTOMATION_PRINCIPAL"
+save_showcase_session
 ```
 
 Publish and fetch back the runbook. The helper discovers the Automation
@@ -615,7 +695,9 @@ scripts/publish-runbook.sh
 
 Require `Published`, `PowerShell74`, and equal local/remote SHA-256 output.
 The explicit location is also compatible with the earlier qualified helper;
-the pinned helper independently discovers and verifies the account region.
+with `LOCATION` set, the pinned helper uses that supplied value. If it is
+unset, the helper discovers the account region. Keep the value aligned with
+the account created in the preceding block.
 
 An optional audit job before reader RBAC should fail before the runbook's
 result phase. Depending on identity visibility, that can be token/context
@@ -1284,16 +1366,17 @@ jq -e \
   ' "$PRIVATE_WORK/final-custom-roles.json" >/dev/null
 
 test "$WRITER_GRANTED" = false
-find "$PRIVATE_WORK" -type f -delete
-rmdir "$PRIVATE_WORK"
 trap - EXIT
 ```
 
 The expected result is two unchanged zero-item policies in
 `TierRecommended`, a byte-matched Published PowerShell 7.4 runbook, no linked
 or active Automation work, exactly one retained RG-scoped reader assignment,
-and no remediator assignment or definition. Deleting the local evidence does
-not delete the retained Azure showcase or its portal-visible job history.
+and no remediator assignment or definition. Keep the mode-0600 recovery file
+and private before/after evidence until teardown is verified. Copy the temporary
+evidence directory to approved private storage if this machine may reboot or
+clear temporary files; it contains tenant identifiers and must stay out of Git.
+The recovery file records names and paths, not live qualification results.
 
 ## 9. Inspect the finished product
 
@@ -1342,6 +1425,11 @@ The purpose of this runbook is to leave the showcase alive. When you are done,
 the combined guide owns teardown; do not follow Automation's standalone
 resource-group deletion while Policy still uses the same RG.
 
+Use the existing session or first restore its private inputs with
+[interruption recovery](#if-the-session-stops). Reacquire the scoped RBAC delete
+permissions from section 1. This path also handles a Policy-only exercise or a
+partially created Automation fixture; it does not delete subscription definitions.
+
 ```bash
 # Refuse every teardown action unless the target is the exact owned scope and
 # still carries the showcase ownership tag.
@@ -1357,11 +1445,26 @@ test "$(printf '%s' "$DELETE_RG_ID" | tr '[:upper:]' '[:lower:]')" = \
   "$(printf '%s' "$POLICY_SCOPE" | tr '[:upper:]' '[:lower:]')"
 test "$DELETE_RG_PURPOSE" = "AzurePolicyAutomationShowcase"
 
-cd "$AUTOMATION_DIR"
-scripts/ring-role.sh revoke \
-  "$SUBSCRIPTION_ID" "$RESOURCE_GROUP" "$AUTOMATION_PRINCIPAL"
-scripts/discovery-role.sh revoke \
-  "$SUBSCRIPTION_ID" "$RESOURCE_GROUP" "$AUTOMATION_PRINCIPAL"
+# Discover the live principal so cleanup also works after an interrupted deploy.
+# Skip the Automation roles only on an explicit not-found response.
+if CLEANUP_PRINCIPAL="$(az automation account show \
+    --subscription "$SUBSCRIPTION_ID" \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$AUTOMATION_ACCOUNT" \
+    --query identity.principalId -o tsv)"; then
+  test -n "$CLEANUP_PRINCIPAL"
+  if [ -n "$AUTOMATION_PRINCIPAL" ]; then
+    test "$CLEANUP_PRINCIPAL" = "$AUTOMATION_PRINCIPAL"
+  fi
+  cd "$AUTOMATION_DIR"
+  scripts/ring-role.sh revoke \
+    "$SUBSCRIPTION_ID" "$RESOURCE_GROUP" "$CLEANUP_PRINCIPAL"
+  scripts/discovery-role.sh revoke \
+    "$SUBSCRIPTION_ID" "$RESOURCE_GROUP" "$CLEANUP_PRINCIPAL"
+else
+  cleanup_probe_status=$?
+  test "$cleanup_probe_status" -eq 3
+fi
 
 cd "$POLICY_DIR"
 ./scripts/unassign.sh \
@@ -1382,13 +1485,72 @@ az group delete \
   --subscription "$SUBSCRIPTION_ID" \
   --name "$RESOURCE_GROUP" \
   --yes --no-wait
+
+# An accepted deletion request is not completed cleanup. This waits up to 30 min.
+az group wait --subscription "$SUBSCRIPTION_ID" --name "$RESOURCE_GROUP" \
+  --deleted --interval 15 --timeout 1800
+test "$(az group exists --subscription "$SUBSCRIPTION_ID" \
+  --name "$RESOURCE_GROUP")" = "false"
 ```
 
 Deleting the RG soft-deletes the purge-protected Key Vault; its name remains
-reserved for the soft-delete retention period unless an authorized operator
-performs a separately reviewed purge. The subscription definitions and
+reserved until its retention period expires. Purge protection cannot be
+overridden by an administrator; use a fresh name for another exercise. See
+[Microsoft's Key Vault recovery guidance](https://learn.microsoft.com/en-us/azure/key-vault/general/key-vault-recovery).
+The subscription definitions and
 initiative intentionally remain. Remove them only after a separate inventory
 proves byte identity, exclusive ownership, and zero assignments at every scope.
+After the RG absence check passes, remove the saved session file and private
+evidence through your normal local file cleanup process. Do not remove them
+while a deletion is still pending or failed.
+
+## If the session stops
+
+`set -e` can close the shell after a failed assertion. Azure changes already
+accepted continue to exist. The writer EXIT trap covers ordinary shell exits;
+it cannot run after a machine loss or a forced kill. Never restart at section 1
+with new random names to recover an existing exercise.
+
+Open a new Bash terminal and locate the private `.env` file under
+`${XDG_STATE_HOME:-$HOME/.local/state}/azure-policy-automation`. Inspect it in a
+local editor before sourcing: it must contain only the variable assignments
+written by `save_showcase_session`, with the exact owned resource names and
+trusted local repository paths. Sourcing a file executes shell code.
+
+```bash
+set -euo pipefail
+umask 077
+read -r -p 'Full path of the inspected private recovery .env file: ' SESSION_FILE
+test -f "$SESSION_FILE"
+source "$SESSION_FILE"
+az login
+az account set --subscription "$SUBSCRIPTION_ID"
+az account show --query '{name:name,id:id,tenantId:tenantId}' --output table
+az group show --subscription "$SUBSCRIPTION_ID" --name "$RESOURCE_GROUP" \
+  --query '{id:id,purpose:tags.Purpose}' --output table
+```
+
+**Check:** the account and owned RG match the saved exercise. If temporary
+checkouts were removed, clone them again and check out the saved `POLICY_REF`
+and `AUTOMATION_REF` before using helpers. Restore the corresponding path
+variables. The file supports inspection and section 11 cleanup only. It does
+not restore shell functions, derived values such as `WORKSPACE_ID`, or job
+state. Do not resume numbered deployment/verification blocks from this recovered
+session; that requires separately restoring their functions and derived values
+from reviewed sources and live readback.
+
+| Where execution stopped | Next action |
+|---|---|
+| Offline checks or source-hash mismatch | Fix the missing tool or review the source diff. No Azure write is needed. |
+| Provider/RBAC failure or definition collision | Inspect the exact error and assignment/resource inventory. A same-name definition may be shared; do not overwrite or remove it to bypass the gate. |
+| Policy scan or remediation timeout | Inspect Policy Compliance and the named remediation task/deployments. Resume read-only polling after convergence; do not promote on empty state or create another task while the first is active. |
+| Automation job, seed PUT, or apply timeout | Inspect the exact job and policy readback. Stop any running canary job in the Automation portal and wait for it to stop. Revoke the exact writer with `ring-role.sh revoke` using the live account principal as in section 11. Do not replay a PUT whose outcome is unknown. |
+| Writer revocation failure | Restore RBAC delete authority, repeat that exact revoke, and require success before further work. |
+| Partial deployment or finished exercise to remove | Use section 11 against the saved owned RG. If a role helper refuses an ownership mismatch, inspect and resolve that mismatch before deleting the identity. |
+
+Keep raw failures and job output private. Use the recovered session to inspect
+or clean up the exercise. A new exercise needs fresh names after the old one
+is accounted for; this document is not an automatic resume engine.
 
 ## Related detail
 

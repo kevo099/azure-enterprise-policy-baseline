@@ -19,7 +19,7 @@ jobs:
         run: python3 scripts/validate.py
       - name: Validate shell scripts and example JSON
         run: |
-          bash -n scripts/*.sh
+          for script in scripts/*.sh; do bash -n "$script"; done
           jq empty examples/*.json
       - name: Compile the retained showcase Bicep
         run: az bicep build --file infra/policy-showcase.bicep --stdout > /dev/null

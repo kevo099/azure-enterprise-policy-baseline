@@ -146,7 +146,7 @@ records the qualification state before teardown.
 | Seed and audit | Exact empty policy seeded to DoNotTier; audit found the one intended candidate and submitted zero writes |
 | Bounded apply | One submitted and verified write; target returned to TierRecommended |
 | Idempotent repeat | Already compliant; zero writes |
-| Other policy properties | No non-tiering drift; both vault policies finished TierRecommended |
+| Other policy properties | Target policy had no non-tiering drift; both vault policies finished TierRecommended |
 | Protected items | Both vaults contained zero protected items |
 | Final combined Policy state | 29 rows: 28 compliant and the one intentional unprotected-share finding |
 | New-resource checks | Automation Account and both vaults each had their exact compliant tag row and expected inherited tag |

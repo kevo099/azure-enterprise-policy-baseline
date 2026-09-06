@@ -566,17 +566,26 @@ verify resource state independently of Policy's summary:
 ```bash
 wait_for_final_policy_state() {
   local state_file="$PRIVATE_WORK/policy-final.json"
+  local required_ids_json
+  required_ids_json="$(jq -cn --args '$ARGS.positional' "$@")"
   for _ in $(seq 1 40); do
     az policy state list \
       --subscription "$SUBSCRIPTION_ID" \
       --resource-group "$RESOURCE_GROUP" \
       --policy-assignment "$POLICY_ASSIGNMENT" \
       --output json >"$state_file"
-    if jq -e '
+    if jq -e --argjson requiredIds "$required_ids_json" '
+      def norm: ascii_downcase | sub("/$"; "");
+      . as $states |
       ([.[] | select(.policyDefinitionReferenceId == "inherit-tag-from-resource-group")] | length) > 0 and
       ([.[] | select(.policyDefinitionReferenceId == "inherit-tag-from-resource-group" and .complianceState != "Compliant")] | length) == 0 and
       ([.[] | select(.policyDefinitionReferenceId == "deploy-keyvault-diagnostics" and .complianceState == "Compliant")] | length) == 1 and
-      ([.[] | select(.policyDefinitionReferenceId == "audit-file-share-backup-protection" and .complianceState == "NonCompliant")] | length) == 1
+      ([.[] | select(.policyDefinitionReferenceId == "audit-file-share-backup-protection" and .complianceState == "NonCompliant")] | length) == 1 and
+      all($requiredIds[]; . as $id
+        | any($states[];
+            .policyDefinitionReferenceId == "inherit-tag-from-resource-group" and
+            .complianceState == "Compliant" and
+            (((.resourceId // "") | norm) == ($id | norm))))
     ' "$state_file" >/dev/null; then
       return 0
     fi
@@ -1216,7 +1225,10 @@ az policy state trigger-scan \
   --subscription "$SUBSCRIPTION_ID" \
   --resource-group "$RESOURCE_GROUP" \
   --no-wait
-wait_for_final_policy_state
+wait_for_final_policy_state \
+  "$AUTOMATION_RESOURCE_ID" \
+  "$RG_VAULT_RESOURCE_ID" \
+  "$SUBSCRIPTION_VAULT_RESOURCE_ID"
 
 jq -e \
   --arg automation "$AUTOMATION_RESOURCE_ID" \

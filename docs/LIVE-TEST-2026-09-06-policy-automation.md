@@ -1,6 +1,6 @@
-# Policy + Automation test preparation (2026-09-06, provisional)
+# Partial Policy + Automation live test (2026-09-06)
 
-**Preparation passed; end-to-end live qualification is pending Azure RBAC.**
+**Workspace checks passed; end-to-end live qualification is blocked on Azure RBAC.**
 This record covers the completed workspace preparation and an independently
 reproduced documentation defect. It does not replace the completed
 [2026-08-31 qualification](LIVE-TEST-2026-08-31-policy-automation.md).
@@ -36,7 +36,9 @@ custom definition reported one service version, `1.0.0`. A separate comparison
 required that exact version shape and equality of all remaining authored
 initiative fields. This establishes the currently resolved rule equivalence;
 it is not raw source-byte equality or proof of fresh definition publication.
-The raw before state is retained privately for a later unchanged-state check.
+The final read-only comparison confirmed all 16 definitions and the initiative
+were unchanged, including metadata and service-version state. Raw before and
+after evidence remains private.
 
 ## Section 8 convergence defect and fix
 
@@ -73,13 +75,28 @@ state is incomplete evidence, not proof of compliance.
 | Enforcement promotion, Modify and diagnostics remediation | Pending scoped Azure RBAC authority and prior stages |
 | Fresh joint Automation publication, reader/apply/idempotence | Pending Policy qualification and scoped Azure RBAC authority |
 | Final combined resource, Policy, job and RBAC invariants | Not run |
-| Temporary-resource cleanup and shared-object after comparison | Pending coordinated teardown |
+| Workspace cleanup and shared-object after comparison | Passed; workspace deleted and shared objects unchanged |
 
 Contributor plus Resource Policy Contributor does not grant the role-management
 operations needed by the workflow. The temporary grant must cover custom-role
 definitions as well as assignments; RBAC Administrator alone lacks the former.
 [Microsoft privileged role definitions](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/privileged)
 
-The prepared workspace remains a temporary test resource until cleanup is
-verified. No new Policy assignment, Policy fixture, remediation, or joint
-Automation qualification is claimed by this provisional record.
+The test workspace was deleted and the exact resource group was verified empty.
+Its ownership tags remain so an administrator can grant access at that empty
+scope before a later full test. No Policy assignment, Policy fixture,
+remediation, or joint Automation qualification is claimed by this record.
+
+## Shared Automation publisher correction
+
+The separate Backup walkthrough exposed Azure CLI 2.90.0 trimming the runbook's
+final newline during `@file` expansion. The original publisher correctly
+rejected the resulting hash mismatch. The byte-preserving publisher fix in
+Backup commit `03839a29b0fff02442d88a414d7ac32851d227c7` passed live draft and
+published hash verification against the unchanged qualified runbook.
+
+This guide now pins that corrected helper. Runbook, fixture, and RBAC helper
+content match the earlier helper pin. This is evidence from the standalone
+Backup test; the combined Policy/Automation path remains unexecuted. See the
+[Backup test record](https://github.com/kevo099/azure-backup-smart-tiering-automation/blob/033671d68d4790ceb10d4f6870de9039b1c04863/docs/LIVE-TEST-2026-09-06.md)
+for publication and cleanup evidence.

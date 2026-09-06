@@ -70,7 +70,7 @@ The last joint live qualification used these public sources:
 |---|---|
 | Policy definitions, initiative, and lifecycle scripts | `kevo099/azure-enterprise-policy-baseline` commit `d07fe194b46a4b1df9f20e04f6454dc1f3f81148` |
 | Automation runbook and fixture used in the live qualification | `kevo099/azure-backup-smart-tiering-automation` commit `67ecfe0f5a3bebbac472fc629aa1911846180056` |
-| Propagation-safe replication helpers used by this guide | `kevo099/azure-backup-smart-tiering-automation` commit `1abbdcc066d58d9fb765d78fff3763ee34acf97a` |
+| Propagation-safe replication helpers with byte-preserving publication | `kevo099/azure-backup-smart-tiering-automation` commit `03839a29b0fff02442d88a414d7ac32851d227c7` |
 | Published Automation runbook | SHA-256 `2cef45acc81b04a6bbcd62582db6f974102ae98f2de79231a90907f49a7dd555` |
 
 The Policy showcase Bicep in this guide was sanitized from the live fixture. It
@@ -158,7 +158,7 @@ WORK_ROOT="$(mktemp -d)"
 POLICY_DIR="$WORK_ROOT/azure-enterprise-policy-baseline"
 AUTOMATION_DIR="$WORK_ROOT/azure-backup-smart-tiering-automation"
 QUALIFIED_POLICY_CORE="d07fe194b46a4b1df9f20e04f6454dc1f3f81148"
-AUTOMATION_REF="1abbdcc066d58d9fb765d78fff3763ee34acf97a"
+AUTOMATION_REF="03839a29b0fff02442d88a414d7ac32851d227c7"
 EXPECTED_RUNBOOK_SHA="2cef45acc81b04a6bbcd62582db6f974102ae98f2de79231a90907f49a7dd555"
 EXPECTED_POLICY_FIXTURE_SHA="ee6a382443881993fea49ef25f9c6c89ecaff38addb1faa04180b22fc5f0eaad"
 
@@ -707,6 +707,14 @@ The explicit location is also compatible with the earlier qualified helper;
 with `LOCATION` set, the pinned helper uses that supplied value. If it is
 unset, the helper discovers the account region. Keep the value aligned with
 the account created in the preceding block.
+
+The current helper uploads draft content with a binary HTTP body and verifies
+both draft and published hashes. Azure CLI 2.90.0 strips trailing line endings
+when expanding `--content @file` or `--body @file`; that changed the qualified
+runbook's bytes during this replication test. Keep the helper pin above rather
+than substituting either file-expansion command. See the
+[standalone publication test record](https://github.com/kevo099/azure-backup-smart-tiering-automation/blob/033671d68d4790ceb10d4f6870de9039b1c04863/docs/LIVE-TEST-2026-09-06.md)
+for the observed failure and corrected result.
 
 An optional audit job before reader RBAC should fail before the runbook's
 result phase. Depending on identity visibility, that can be token/context

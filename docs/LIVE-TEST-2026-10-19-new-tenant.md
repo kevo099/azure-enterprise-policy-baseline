@@ -72,6 +72,46 @@ and scan after promotion before creating an `ExistingNonCompliant` remediation,
 then require at least one deployment. Both are now in the
 [enforcement guide](GUIDE-file-share-backup-enforcement.md#continuous-enforcement-with-azure-policy).
 
+## NSG management ports 3.0.0
+
+The corrected `deny-nsg-open-management-ports` rule was created as a test-named
+definition (same rule, parameters and mode as 3.0.0) and assigned with `Deny`
+to one new resource group, leaving the shared definition used by the showcase
+untouched. The assignment was effective about 30 seconds after creation. Each
+probe was an `az deployment group validate` request; a denial counted only when
+Azure returned `RequestDisallowedByPolicy` naming the test assignment.
+
+| Request shape | Expected | Result |
+|---|---|---|
+| Inline rule, 22 from `*` | deny | deny |
+| Inline rule, 3389 from `::/0` | deny | deny |
+| Inline rule, `1-65535` from `*` | deny | deny |
+| Inline rule, `20-25` from `Internet` | deny | deny |
+| Inline rule, `destinationPortRanges` `["80","3389"]` from `*` | deny | deny |
+| Inline rule, port `*` from `0.0.0.0/0` | deny | deny |
+| Inline rule, 22 from `sourceAddressPrefixes` `["10.0.0.0/8","0.0.0.0/0"]` | deny | deny |
+| Inline rule, port `022` from `*` | deny | deny |
+| Inline NSG with a compliant 443 rule and a 3389-from-`*` rule | deny | deny |
+| Child rule, 22 from `*` | deny | deny |
+| Child rule, `1-65535` from `*` | deny | deny |
+| Child rule, `20-25` from `Internet` | deny | deny |
+| Child rule, `["80","3389"]` from `*` | deny | deny |
+| Inline rule, 443 from `Internet` | allow | allow |
+| Inline rule, 22 from `VirtualNetwork` | allow | allow |
+| Inline rule, `23-80` from `*` | allow | allow |
+| Inline rule, 22 from `*` with access `Deny` | allow | allow |
+| Inline rule, 22 from `*` outbound | allow | allow |
+| Child rule, 443 from `Internet` | allow | allow |
+| Child rule, `3390-4000` from `*` | allow | allow |
+| NSG with no custom rules | allow | allow |
+
+All 21 matched, including the four shapes that versions before 3.0.0 allowed on
+2026-09-27 (inline 22 and 3389, child `1-65535` and `20-25`). Two real requests
+confirmed request-time behaviour: an NSG with an inline 22-from-`*` rule was
+denied and nothing was created; an NSG with an inline 443-from-`Internet` rule
+was created and then deleted. The probe resource group held no probe NSG
+afterwards.
+
 ## Limits of this evidence
 
 - No NFS share was created, so the reconciler's NFS exception path was not
@@ -82,3 +122,6 @@ then require at least one deployment. Both are now in the
   behaviour in one canary resource group, not at subscription scale.
 - A restore from the vault tier was not tested; the restore used the snapshot
   recovery point.
+- The NSG probes used validation requests plus two real requests in one
+  resource group; split public prefixes such as `0.0.0.0/1` plus `128.0.0.0/1`
+  remain outside the rule by design (see known limitations).

@@ -62,7 +62,7 @@ tenant.
 | 2026-08-31 | sponsorship | [LIVE-TEST-2026-08-31-policy-automation](LIVE-TEST-2026-08-31-policy-automation.md) | Joint Policy remediation and Automation audit/apply/idempotence |
 | 2026-09-06 | sponsorship | [LIVE-TEST-2026-09-06-policy-automation](LIVE-TEST-2026-09-06-policy-automation.md) | The published canary guide, with recoveries for observed propagation issues |
 | 2026-09-27 | new | [LIVE-TEST-2026-09-27-new-tenant](LIVE-TEST-2026-09-27-new-tenant.md) | Guide sections 1–8, validation-only Deny probes, a protected D-series VM |
-| 2026-10-19 | new | [LIVE-TEST-2026-10-19-new-tenant](LIVE-TEST-2026-10-19-new-tenant.md) | Reconciler protect/backup/restore, Microsoft's Azure Files DINE built-in, retained-showcase health |
+| 2026-10-19 | new | [LIVE-TEST-2026-10-19-new-tenant](LIVE-TEST-2026-10-19-new-tenant.md) | Reconciler protect/backup/restore, Microsoft's Azure Files DINE built-in, NSG Deny 3.0.0 probes, retained-showcase health |
 
 The Automation repositories keep their own records (`docs/validation.md` and
 `docs/LIVE-TEST-*.md`).
@@ -79,10 +79,9 @@ The Automation repositories keep their own records (`docs/validation.md` and
 
 ## Open items
 
-- `deny-nsg-open-management-ports` does not evaluate rules declared inline in
-  a network security group and does not detect port ranges that contain a
-  blocked port. See [known limitations](DESIGN.md#known-limitations); a
-  corrected definition needs live Deny probes before release.
+- `deny-nsg-open-management-ports` 3.0.0 now covers inline rules and port
+  ranges (live-probed 2026-10-19). Its source test is still a literal list; see
+  [known limitations](DESIGN.md#known-limitations).
 - Two further policies (Azure Hybrid Benefit for Windows Server and a blob
   smart-tier policy) are being prepared as optional, audit-by-default add-ons.
   Azure Hybrid Benefit attests license ownership; never enable a `Modify`

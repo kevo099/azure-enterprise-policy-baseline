@@ -117,32 +117,23 @@ steps 1, 2 and 4 end to end in a disposable resource group.
 
 ## Known limitations
 
-- **NSG port policy doesn't parse numeric ranges.** A rule allowing
-  `3000-4000` isn't flagged even though it spans no blocked port... and one
-  allowing `20-30` isn't flagged even though it spans 22. Exact matches,
-  wildcards, and `destinationPortRanges` arrays are covered. This is the same
-  limitation the ALZ deny-management-ports policy has; range arithmetic isn't
-  expressible in policy language. A 2026-09-27
-  [validation probe](LIVE-TEST-2026-09-27-new-tenant.md#nsg-observations)
-  confirmed this for child rules: `1-65535` from `*` (every usable port) and
-  `20-25` from `Internet` were not denied, while a `["80","3389"]` list from
-  `*` was.
-- **NSG rules created inline** (as `securityRules[]` in the parent NSG PUT,
-  e.g. by some Terraform configurations) are evaluated as the child
-  `securityRules` type only on subsequent per-rule writes. Compliance scans
-  still catch them after creation. A 2026-09-27 validation probe confirmed
-  the request-time gap: inline rules (22 from `*`, 3389 from `::/0`) passed
-  validation, while the same rules as child resources were denied. In the same
-  run, a detached NSG actually created under enforcement with an inline
-  22-from-`*` rule was reported `NonCompliant` by a later compliance scan
-  ([record](LIVE-TEST-2026-09-27-new-tenant.md#nsg-observations)).
-- **Operator mitigation for both NSG gaps:** where you own the templates,
-  declare rules as child `securityRules` resources so request-time Deny
-  applies. Rely on compliance results, and alerts on them, for inline rules.
-  Review port-range rules separately, because the policy rule cannot flag a
-  range that spans a blocked port; for example, inspect the
-  `destinationPortRange` and `destinationPortRanges` values that
-  `az network nsg rule list` returns for allowed inbound rules.
+- **NSG port policy (3.0.0) covers inline rules and port ranges.** It evaluates
+  both the child `securityRules` type and rules declared inline in an NSG
+  (`securityRules[*]`), and it compares each destination port, list entry and
+  `N-M` range against every blocked port, so `20-25` and `1-65535` are caught.
+  Versions before 3.0.0 matched only child rules and exact port strings; a
+  2026-09-27 [probe](LIVE-TEST-2026-09-27-new-tenant.md#nsg-observations) proved
+  both bypasses. On 2026-10-19 the 3.0.0 rule passed 21 of 21 validation probes
+  (13 denials, including all four 2026-09-27 bypass shapes, and 8 correct
+  allows) and two real requests, with a test copy assigned to one resource group
+  ([record](LIVE-TEST-2026-10-19-new-tenant.md#nsg-management-ports-300)).
+- **NSG source matching is a literal list.** Sources `*`, `Internet`,
+  `0.0.0.0`, `0.0.0.0/0` and `::/0` (as a prefix or in a prefix list) are
+  treated as the Internet. A rule that reaches the Internet through split
+  prefixes such as `0.0.0.0/1` plus `128.0.0.0/1`, or through other public
+  ranges, is not detected. Keep the `ports` parameter to numeric ports or `N-M`
+  ranges (at most 100 entries); compliance scans and periodic rule review
+  remain the backstop for unusual shapes.
 - **`allowed-vm-skus` covers `Microsoft.Compute/virtualMachines` only**, not
   scale-set SKU properties. Add a VMSS variant if scale sets are common in
   your estate.

@@ -44,7 +44,7 @@ operational backstop.
 The initiative re-exposes each one, so a single assignment can mix enforcement
 levels and a brownfield estate can start at `Audit` everywhere without forking
 JSON. Defaults are deliberately strict (`Deny`) because a baseline should be
-secure by default; the rollout SOP in the README is the escape hatch.
+secure by default; the [rollout procedure](#rollout) is the escape hatch.
 
 **Properties with platform defaults are treated as non-compliant when
 absent.** `allowBlobPublicAccess`, `enablePurgeProtection`, and
@@ -87,6 +87,33 @@ definition missing from the initiative fails CI).
 and the Log Analytics workspace ID must be supplied at assignment. Any
 default this repo could ship would be wrong for most organizations, and a
 wrong-but-working default is how policy ends up silently ineffective.
+
+## Rollout
+
+Roll the initiative out in stages so that a strict default never surprises an
+existing estate:
+
+1. **Publish** the definitions and initiative at the definition scope
+   (`scripts/deploy.sh`). Definitions alone change nothing.
+2. **Canary in report-only mode.** Assign to one owned resource group with
+   `scripts/assign.sh --dry-run` (`DoNotEnforce`). Trigger a compliance scan
+   and wait for nonempty state; zero rows is inconclusive, not compliant.
+3. **Broaden in audit.** Assign to the wider scope with the `Deny` effects set
+   to `Audit` in the parameter file. Review every noncompliant resource and add
+   time-bound exemptions where an exception is justified.
+4. **Promote per scope.** Restore the `Deny` effects and the default
+   enforcement mode one scope at a time. For `Modify` and `DeployIfNotExists`
+   effects, trigger a scan after the change, wait for a compliance record newer
+   than the change, then create the remediation and require at least one
+   successful deployment.
+5. **Roll back by effect, not deletion.** The fast escape is to set the affected
+   effect to `Audit`/`Disabled` or the assignment back to `DoNotEnforce`. That
+   keeps the assignment identity and its role grants, so promoting again does not
+   recreate them. Remove an assignment with `scripts/unassign.sh` only when
+   retiring it.
+
+The [Policy + Automation canary](REPLICATE-POLICY-AUTOMATION.md) implements
+steps 1, 2 and 4 end to end in a disposable resource group.
 
 ## Known limitations
 

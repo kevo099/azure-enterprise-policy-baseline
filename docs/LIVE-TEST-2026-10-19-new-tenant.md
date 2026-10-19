@@ -9,9 +9,13 @@ subscription, principal or resource identifiers.
 
 - Azure CLI 2.91.0 with the `automation` extension 1.0.0b2; Python 3.14.
 - Region East US 2 for every resource in this record.
-- Repository `main` at `0c893e5` (`scripts/ensure_file_share_backup.py` and
-  `examples/azure-files-backup-policy.json` unchanged since their last live test).
-- Each track used its own new resource group; no shared resource was changed.
+- Repository `main` at `0c893e5` for the test tracks (`scripts/ensure_file_share_backup.py`
+  and `examples/azure-files-backup-policy.json` unchanged since their last live test). The
+  NSG track used a test-named copy of the proposed 3.0.0 rule.
+- Each test track used its own new resource group and changed no shared resource. The one
+  shared change came last: after 3.0.0 was merged, the showcase's subscription-scope
+  definitions were republished from `main` at `3fc15ff`, which moved
+  `deny-nsg-open-management-ports` from 2.0.0 to 3.0.0 (see the end of the NSG section).
 
 ## Retained showcase health check
 
@@ -113,7 +117,8 @@ was created and then deleted. The probe resource group held no probe NSG
 afterwards.
 
 After 3.0.0 was merged, `scripts/deploy.sh` republished the showcase's
-definitions from `main`. The next scan evaluated the showcase NSG and its child
+definitions from `main` at `3fc15ff`; of the shared definitions, only
+`deny-nsg-open-management-ports` changed (2.0.0 to 3.0.0). The next scan evaluated the showcase NSG and its child
 rule `Compliant`. The only noncompliant resource left in the showcase was its
 intentionally unprotected file share, as expected.
 

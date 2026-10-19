@@ -69,7 +69,7 @@ artifacts and a single assignment surface.
 | 1 | `deny-storage-https-disabled` | Security | Deny | Storage accounts must enforce HTTPS-only traffic |
 | 2 | `deny-storage-minimum-tls` | Security | Deny | Storage accounts must set a minimum TLS version (default TLS 1.2) |
 | 3 | `deny-storage-public-blob-access` | Security | Deny | Storage accounts must disallow anonymous blob access |
-| 4 | `deny-nsg-open-management-ports` | Security | Deny | Child NSG rules may not allow SSH/RDP (parameterized) inbound from the Internet; see [Known limitations](docs/DESIGN.md#known-limitations) for inline rules and port ranges |
+| 4 | `deny-nsg-open-management-ports` | Security | Deny | NSG rules, child or inline, may not allow SSH/RDP (parameterized) inbound from the Internet, including port ranges that contain a blocked port; see [Known limitations](docs/DESIGN.md#known-limitations) for source matching |
 | 5 | `deny-nic-public-ip` | Security | Deny | Network interfaces must not attach public IP addresses |
 | 6 | `deny-sql-public-network-access` | Security | Deny | SQL logical servers must disable public network access |
 | 7 | `deny-keyvault-purge-protection-disabled` | Security | Deny | Key vaults must enable purge protection |

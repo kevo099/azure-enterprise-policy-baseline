@@ -110,7 +110,7 @@ Use these after reviewing the Microsoft options above:
 
 - Azure CLI authenticated to the intended tenant/subscription and Python
   3.10 or newer for the reconciliation script (live-tested with Azure CLI
-  2.89.0).
+  2.89.0 and 2.91.0).
 - A Recovery Services vault in the same Azure region as the storage accounts.
 - An Azure Files policy in that vault. Prefer Vault-Standard when its support
   requirements fit the workload; snapshot-only protection remains in the
@@ -170,6 +170,12 @@ python3 scripts/ensure_file_share_backup.py \
   --apply
 ```
 
+If the first registration of a storage account returns Azure Backup's generic
+`CloudInternalError` (error code 1073871825, "Wait for a few minutes and then try
+the operation again"), the script stops with exit status `1` before changing other
+shares. Wait a few minutes and rerun the same `--apply` command; the plan is
+recomputed from live state, so completed actions are not repeated.
+
 `--apply` enables unprotected shares, resumes stopped items already associated
 with the target vault, and waits up to 30 minutes for a healthy configuration
 record. `INITIAL_RECOVERY_PENDING` means Azure accepted the configuration but
@@ -216,7 +222,10 @@ RBAC grants. It does not automatically enable protection until promoted.
 
 ```bash
 SCOPE="/subscriptions/$SUB/resourceGroups/<canary-rg>"
-POLICY_ID="/providers/Microsoft.Authorization/policyDefinitions/e159e079-0ddd-4905-97c9-79a8fca6d880"
+# Pass the built-in definition by its GUID name. Azure CLI 2.91 misreads the full
+# tenant-level ID (/providers/Microsoft.Authorization/policyDefinitions/<guid>) as a
+# management-group path and fails with PolicyDefinitionNotFound.
+POLICY_ID="e159e079-0ddd-4905-97c9-79a8fca6d880"
 BACKUP_POLICY_ID="/subscriptions/$SUB/resourceGroups/<backup-rg>/providers/Microsoft.RecoveryServices/vaults/<vault>/backupPolicies/<azure-files-policy>"
 VAULT_RG_SCOPE="/subscriptions/$SUB/resourceGroups/<backup-rg>"
 
@@ -268,11 +277,32 @@ block enables automatic protection and starts the initial remediation:
 ```bash
 az policy assignment update --name azure-files-backup-eus2 --scope "$SCOPE" \
   --enforcement-mode Default
+PROMOTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+# A remediation in the default ExistingNonCompliant mode uses existing compliance
+# records. Records written before the promotion are ignored, so a remediation
+# created immediately can finish "Succeeded" with zero deployments. Scan first and
+# wait for a noncompliant record newer than the promotion.
+az policy state trigger-scan --resource-group "<canary-rg>"
+az policy state list --resource-group "<canary-rg>" \
+  --policy-assignment azure-files-backup-eus2 \
+  --from "$PROMOTED_AT" --filter "complianceState eq 'NonCompliant'" \
+  --query 'length(@)' -o tsv
+
 az policy remediation create \
   --name azure-files-backup-eus2-initial \
   --policy-assignment azure-files-backup-eus2 \
   --resource-group "<canary-rg>"
+az policy remediation show --name azure-files-backup-eus2-initial \
+  --resource-group "<canary-rg>" \
+  --query '{state:provisioningState,deployments:deploymentStatus}'
 ```
+
+**Check:** the state count is greater than zero before you create the
+remediation, and the remediation finishes `Succeeded` with
+`totalDeployments` greater than zero. `Succeeded` with zero deployments means it
+found nothing to fix; repeat the scan-and-wait step instead of assuming
+coverage.
 
 New ARM-created shares are evaluated asynchronously after creation. This is
 not synchronous request-time enforcement and does not prove that a scheduled
@@ -346,6 +376,16 @@ It also verified zero active test delta after cleanup. Azure Policy returned no
 state records during that window, so Policy evaluation was inconclusive, and
 the test identity could not validate DINE managed-identity role grants. See
 `docs/LIVE-TEST-2026-08-25-file-share-backup-enforcement.md`.
+
+The 2026-10-19 test ran in the new pay-as-you-go tenant with Azure CLI 2.91.0.
+The reconciler protected two SMB shares after one transient registration error
+and a rerun, an on-demand backup produced a recovery point, and an item-level
+alternate-location restore returned the canary file byte-for-byte. Microsoft's
+existing-vault `DeployIfNotExists` built-in was then assigned with its two role
+grants, reported the third share noncompliant, and protected it once the
+remediation was created after a post-promotion compliance record. The
+reconciler's final dry-run counted all three shares as covered. See
+[the 2026-10-19 record](LIVE-TEST-2026-10-19-new-tenant.md).
 
 ## GitHub implementation audit (2026-08-25)
 

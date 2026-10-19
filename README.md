@@ -20,6 +20,12 @@ JSON in CI.
 > This is a community project. It is not affiliated with or endorsed by
 > Microsoft.
 
+> **Part of an Azure governance suite.** See the [suite overview](docs/SUITE.md) for
+> what each part does, which tool to use when, and the live-test evidence:
+> this Policy baseline and its Azure Files reconciler, the
+> [Azure Backup smart-tiering runbook](https://github.com/kevo099/azure-backup-smart-tiering-automation),
+> and the [Blob Storage smart-tier runbook](https://github.com/kevo099/azure-storage-smart-tier-automation).
+
 ## Recommended order of use
 
 1. Prefer a generally available Microsoft built-in when it expresses the
@@ -94,7 +100,8 @@ initiatives/         enterprise-baseline.json (policy set definition)
 scripts/             Deploy, assign, unassign, undeploy, and validation tools
 examples/            Starter assignment parameter values
 infra/               Tenant-neutral retained-showcase Bicep fixture
-docs/DESIGN.md       Design decisions, sources, known limitations, rollout SOP
+docs/DESIGN.md       Design decisions, sources, rollout procedure, known limitations
+docs/SUITE.md        Suite overview: components, which tool when, evidence index
 docs/REPLICATE-*     Complete Policy + Automation replication runbook
 .github/workflows/   CI: validation on PRs and pushes to main
 ```
@@ -165,7 +172,7 @@ output private and use the guide's recovery instructions.
 
 The default script scope is the entire current subscription. Always pass the
 reviewed `--scope`, `--name`, and parameter file explicitly. Broader rollout
-belongs in [the design and rollout SOP](docs/DESIGN.md); the canary is the
+belongs in [the rollout procedure](docs/DESIGN.md#rollout); the canary is the
 starting point for learning and validation.
 
 ### Clean removal

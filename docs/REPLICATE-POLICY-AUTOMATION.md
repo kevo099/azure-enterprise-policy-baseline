@@ -69,7 +69,7 @@ The last joint live qualification used these public sources:
 
 | Component | Reviewed source |
 |---|---|
-| Policy definitions, initiative, and lifecycle scripts | `kevo099/azure-enterprise-policy-baseline` commit `d07fe194b46a4b1df9f20e04f6454dc1f3f81148` |
+| Policy definitions, initiative, and lifecycle scripts | `kevo099/azure-enterprise-policy-baseline` commit `cf2212155c37b310eb4d53e8fda2cbd20f391e8f` (identical to the jointly qualified `d07fe194b46a4b1df9f20e04f6454dc1f3f81148` except `deny-nsg-open-management-ports` 3.0.0) |
 | Automation runbook and fixture used in the live qualification | `kevo099/azure-backup-smart-tiering-automation` commit `67ecfe0f5a3bebbac472fc629aa1911846180056` |
 | Propagation-safe replication helpers with byte-preserving publication | `kevo099/azure-backup-smart-tiering-automation` commit `03839a29b0fff02442d88a414d7ac32851d227c7` |
 | Published Automation runbook | SHA-256 `2cef45acc81b04a6bbcd62582db6f974102ae98f2de79231a90907f49a7dd555` |
@@ -85,6 +85,15 @@ one environment-driven change, an allow-listed `AUTOMATION_LOCATION`. An
 optional VM extension also needed an available VM size. Some sections
 overlapped in that run; see the
 [sanitized new-tenant record](LIVE-TEST-2026-09-27-new-tenant.md).
+
+On 2026-10-19 the gated core advanced to `cf2212155c37b310eb4d53e8fda2cbd20f391e8f`. The only change in the gated
+paths is `policies/security/deny-nsg-open-management-ports.json` 3.0.0, which
+also evaluates NSG rules declared inline and port ranges that contain a blocked
+port. That definition was qualified on its own in the new tenant: a test copy
+assigned to one resource group passed 21 of 21 validation probes and two real
+requests, including the showcase fixture's own inline TCP/443 rule, which is
+still allowed. Sections 1–8 of this guide were not re-run for that change; see
+[the 2026-10-19 record](LIVE-TEST-2026-10-19-new-tenant.md#nsg-management-ports-300).
 
 This workflow reproduces Policy evaluation, Modify remediation, Key Vault
 `DeployIfNotExists`, audit signals, Automation audit/apply/idempotence, and
@@ -188,7 +197,7 @@ az bicep version
 WORK_ROOT="$(mktemp -d)"
 POLICY_DIR="$WORK_ROOT/azure-enterprise-policy-baseline"
 AUTOMATION_DIR="$WORK_ROOT/azure-backup-smart-tiering-automation"
-QUALIFIED_POLICY_CORE="d07fe194b46a4b1df9f20e04f6454dc1f3f81148"
+QUALIFIED_POLICY_CORE="cf2212155c37b310eb4d53e8fda2cbd20f391e8f"
 AUTOMATION_REF="03839a29b0fff02442d88a414d7ac32851d227c7"
 EXPECTED_RUNBOOK_SHA="2cef45acc81b04a6bbcd62582db6f974102ae98f2de79231a90907f49a7dd555"
 EXPECTED_POLICY_FIXTURE_SHA="ee6a382443881993fea49ef25f9c6c89ecaff38addb1faa04180b22fc5f0eaad"

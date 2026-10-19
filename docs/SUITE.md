@@ -73,7 +73,7 @@ The Automation repositories keep their own records (`docs/validation.md` and
 |---|---|---|
 | Azure CLI | 2.89–2.91 | 2.90+ trims trailing newlines when expanding `--content @file`/`--body @file`; the backup publisher uploads binary bytes instead. 2.91 cannot resolve a full built-in policy ID such as `/providers/Microsoft.Authorization/policyDefinitions/<guid>` in `az policy assignment create --policy`; pass the definition GUID name. |
 | Azure CLI `automation` extension | 1.0.0b2 | Pinned by the guides |
-| Automation runtime | PowerShell 7.4 runtime environment | Microsoft ends PowerShell 7.4 support on 2026-11-10 and PowerShell 7.6 runtime environments are generally available; moving the runbooks to 7.6 is the next maintenance item. |
+| Automation runtime | PowerShell 7.4 runtime environment; both runbooks also verified on 7.6 (2026-10-19) | Microsoft ends PowerShell 7.4 support on 2026-11-10. Both runbooks completed read-only audits unchanged on PowerShell 7.6 runtime environments; switching the templates to 7.6 is the next release item. |
 | Azure Policy remediation | `ExistingNonCompliant` default mode | A remediation created immediately after changing an assignment can finish with zero deployments because the only noncompliant records predate the change. Trigger a scan, wait for a record newer than the change, and require `totalDeployments > 0`. |
 | Recovery Services vaults | soft delete `AlwaysOn` | New vaults cannot disable soft delete; a deleted item is retained for 14 days and the vault can be deleted once those items purge. |
 
@@ -87,5 +87,5 @@ The Automation repositories keep their own records (`docs/validation.md` and
   smart-tier policy) are being prepared as optional, audit-by-default add-ons.
   Azure Hybrid Benefit attests license ownership; never enable a `Modify`
   effect without eligible Windows Server licenses with Software Assurance.
-- Runbooks will move to the PowerShell 7.6 runtime after a live
-  re-qualification.
+- Runbook templates will default to the PowerShell 7.6 runtime; both runbooks
+  already passed read-only audits on 7.6.

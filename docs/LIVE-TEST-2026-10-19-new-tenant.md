@@ -112,6 +112,21 @@ denied and nothing was created; an NSG with an inline 443-from-`Internet` rule
 was created and then deleted. The probe resource group held no probe NSG
 afterwards.
 
+After 3.0.0 was merged, `scripts/deploy.sh` republished the showcase's
+definitions from `main`. The next scan evaluated the showcase NSG and its child
+rule `Compliant`. The only noncompliant resource left in the showcase was its
+intentionally unprotected file share, as expected.
+
+## Cleanup
+
+- NSG track: the test assignment and test definition were deleted, then the
+  probe resource group.
+- Azure Files track: the built-in's assignment and the two role grants it
+  received were removed, so nothing is enforced there any more. The fixture's
+  vault, storage account and recovery points were kept pending the owner's
+  decision. With soft delete `AlwaysOn`, deleting their backup data starts a
+  14-day retention before the vault can be deleted.
+
 ## Limits of this evidence
 
 - No NFS share was created, so the reconciler's NFS exception path was not

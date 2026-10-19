@@ -2,8 +2,9 @@
 
 This page is the entry point for a small, live-tested Azure governance suite:
 Azure Policy for request-time and continuous controls, Azure Automation
-runbooks for guarded changes that Policy cannot express, and one
-reconciliation script for immediate Azure Files backup coverage. Each part is
+runbooks for guarded changes that Policy cannot express, one
+reconciliation script for immediate Azure Files backup coverage, and a
+reference setup for patching Linux VMs with Azure Update Manager. Each part is
 usable on its own. Start with the row that matches the outcome you need.
 
 | Component | Where | Kind | What it does | Start here | Latest evidence |
@@ -12,6 +13,7 @@ usable on its own. Start with the row that matches the outcome you need.
 | Azure Files backup reconciler | this repository: `scripts/ensure_file_share_backup.py` | Python + Azure CLI script | Immediately protects unprotected classic SMB file shares in one vault and reports coverage; safe dry-run by default | [Azure Files enforcement guide](GUIDE-file-share-backup-enforcement.md) | 2026-10-19, new tenant ([record](LIVE-TEST-2026-10-19-new-tenant.md)) |
 | Azure Backup smart tiering | [azure-backup-smart-tiering-automation](https://github.com/kevo099/azure-backup-smart-tiering-automation) | Azure Automation runbook (PowerShell) | Sets `TierRecommended` on eligible Azure VM backup policies, one guarded ring at a time | its [replication guide](https://github.com/kevo099/azure-backup-smart-tiering-automation/blob/main/docs/replicate-in-azure.md) | 2026-10-19 health check; 2026-09-27 protected-VM write ([record](https://github.com/kevo099/azure-backup-smart-tiering-automation/blob/main/docs/LIVE-TEST-2026-09-27.md)) |
 | Blob Storage smart tier | [azure-storage-smart-tier-automation](https://github.com/kevo099/azure-storage-smart-tier-automation) | Azure Automation runbook (PowerShell) | Sets `accessTier=Smart` on opted-in, eligible storage accounts after audit | its [replication guide](https://github.com/kevo099/azure-storage-smart-tier-automation/blob/main/docs/replicate-in-azure.md) | 2026-10-19, new tenant, full walkthrough ([validation](https://github.com/kevo099/azure-storage-smart-tier-automation/blob/main/docs/validation.md)) |
+| Linux patching | [azure-update-manager-linux-patching](https://github.com/kevo099/azure-update-manager-linux-patching) | Microsoft built-in policies, Bicep, Automation runbooks (PowerShell), Resource Graph queries | Onboards Linux VMs by policy, patches them in rings with pre-patch snapshots and change-freeze cancels, and reports and alerts per machine | its [setup guide](https://github.com/kevo099/azure-update-manager-linux-patching/blob/main/docs/GUIDE.md) | 2026-10-19, new tenant, three scheduled runs ([record](https://github.com/kevo099/azure-update-manager-linux-patching/blob/main/docs/LIVE-TEST-2026-10-19.md)) |
 
 The [Policy + Automation canary](REPLICATE-POLICY-AUTOMATION.md) combines the
 baseline with the Azure Backup runbook in one owned resource group and leaves a
@@ -27,6 +29,7 @@ small showcase running for inspection.
 | Create a companion resource (diagnostic settings) | Azure Policy `DeployIfNotExists` + remediation | The policy identity deploys the missing resource |
 | Change something Policy cannot reach, or that needs judgement, guards and verification | Azure Automation runbook (this suite's runbooks) | No policy alias exists for backup-policy tiering; blob Smart tier is a priced change that should stay opt-in and audited first |
 | Close a coverage gap immediately, then keep checking | Reconciliation script on a schedule | Policy evaluation and remediation are asynchronous; a reconciler gives an immediate, independently checked result |
+| Install OS updates on a schedule, with snapshots, freezes and reporting | Azure Update Manager: built-in onboarding policies, maintenance configurations, pre/post events | Microsoft's patching service; the suite's Linux reference wires the enterprise pieces around it |
 | Build new resources | Bicep/Terraform, Azure Verified Modules, Microsoft Quickstarts | Deployment is not governance; govern the result with Policy |
 
 Prefer a Microsoft built-in policy or template when it expresses the control.
@@ -42,7 +45,9 @@ explains when this repository's custom definitions are the better choice.
   (`properties.accessTier`), which lets Azure manage hot/cool/cold placement of
   blobs. It is unrelated to backup recovery points.
 - **Ring** is a deliberately small set of targets changed in one window; the
-  runbooks change one named ring at a time and verify before the next.
+  runbooks change one named ring at a time and verify before the next. In the
+  Update Manager reference, a *patch ring* is a maintenance configuration whose
+  dynamic scope selects VMs by their `PatchRing` tag.
 - **Canary** is a disposable owned resource group used to prove a change
   before it reaches shared scopes.
 
@@ -64,8 +69,8 @@ tenant.
 | 2026-09-27 | new | [LIVE-TEST-2026-09-27-new-tenant](LIVE-TEST-2026-09-27-new-tenant.md) | Guide sections 1–8, validation-only Deny probes, a protected D-series VM |
 | 2026-10-19 | new | [LIVE-TEST-2026-10-19-new-tenant](LIVE-TEST-2026-10-19-new-tenant.md) | Reconciler protect/backup/restore, Microsoft's Azure Files DINE built-in, NSG Deny 3.0.0 probes, retained-showcase health |
 
-The Automation repositories keep their own records (`docs/validation.md` and
-`docs/LIVE-TEST-*.md`).
+The Automation and Update Manager repositories keep their own records
+(`docs/validation.md` and `docs/LIVE-TEST-*.md`).
 
 ## Tested tooling and known platform quirks
 

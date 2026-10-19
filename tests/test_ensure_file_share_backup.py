@@ -98,6 +98,16 @@ class InventoryTests(unittest.TestCase):
             with self.assertRaisesRegex(MODULE.AzureCliError, "exceeded 7s"):
                 cli.json("account", "show")
 
+    def test_json_command_reports_missing_azure_cli(self):
+        cli = MODULE.AzureCli()
+        with mock.patch.object(
+            MODULE.subprocess,
+            "run",
+            side_effect=FileNotFoundError("az"),
+        ):
+            with self.assertRaisesRegex(MODULE.AzureCliError, "was not found"):
+                cli.json("account", "show")
+
     def test_rest_values_validates_and_follows_next_link(self):
         cli = MODULE.AzureCli()
         with mock.patch.object(
@@ -937,6 +947,42 @@ class TargetTests(unittest.TestCase):
             MODULE.target_from_azure(
                 cli, "sub", "rg-backup", "rsv", "DefaultPolicy"
             )
+
+    def test_target_rejects_vault_without_parseable_resource_id(self):
+        cli = FakeCli(
+            {
+                ("backup", "vault", "show"): {"location": "eastus2"},
+                ("backup", "policy", "show"): {
+                    "properties": {
+                        "backupManagementType": "AzureStorage",
+                        "workLoadType": "AzureFileShare",
+                    }
+                },
+            }
+        )
+        with self.assertRaisesRegex(MODULE.AzureCliError, "no parseable resource ID"):
+            MODULE.target_from_azure(cli, "sub", "rg-backup", "rsv", "afs")
+
+    def test_target_rejects_cross_subscription_vault(self):
+        cli = FakeCli(
+            {
+                ("backup", "vault", "show"): {
+                    "id": (
+                        "/subscriptions/other/resourceGroups/rg-backup/providers/"
+                        "Microsoft.RecoveryServices/vaults/rsv"
+                    ),
+                    "location": "eastus2",
+                },
+                ("backup", "policy", "show"): {
+                    "properties": {
+                        "backupManagementType": "AzureStorage",
+                        "workLoadType": "AzureFileShare",
+                    }
+                },
+            }
+        )
+        with self.assertRaisesRegex(MODULE.AzureCliError, "outside the selected"):
+            MODULE.target_from_azure(cli, "sub", "rg-backup", "rsv", "afs")
 
 
 if __name__ == "__main__":

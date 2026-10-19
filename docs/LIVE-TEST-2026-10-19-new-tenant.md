@@ -122,10 +122,12 @@ intentionally unprotected file share, as expected.
 - NSG track: the test assignment and test definition were deleted, then the
   probe resource group.
 - Azure Files track: the built-in's assignment and the two role grants it
-  received were removed, so nothing is enforced there any more. The fixture's
-  vault, storage account and recovery points were kept pending the owner's
-  decision. With soft delete `AlwaysOn`, deleting their backup data starts a
-  14-day retention before the vault can be deleted.
+  received were removed, so nothing is enforced there any more. Protection was
+  then stopped on all three shares with their backup data deleted; each item
+  reported `ProtectionStopped` and scheduled for deferred deletion. With soft
+  delete `AlwaysOn` the recovery points are kept 14 days, so the empty vault
+  and the storage account (still carrying Azure Backup's `CanNotDelete` lock)
+  can only be deleted after that retention ends.
 
 ## Limits of this evidence
 

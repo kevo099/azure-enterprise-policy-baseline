@@ -288,7 +288,14 @@ az policy state list --resource-group "<canary-rg>" \
   --policy-assignment azure-files-backup-eus2 \
   --from "$PROMOTED_AT" --filter "complianceState eq 'NonCompliant'" \
   --query 'length(@)' -o tsv
+```
 
+**Check before creating the remediation:** the count must be greater than zero.
+If it is zero, wait and repeat the scan and state query; keep the existing
+assignment and do not create a remediation yet. Continue only when the new
+noncompliant records cover the intended canary.
+
+```bash
 az policy remediation create \
   --name azure-files-backup-eus2-initial \
   --policy-assignment azure-files-backup-eus2 \
@@ -298,9 +305,9 @@ az policy remediation show --name azure-files-backup-eus2-initial \
   --query '{state:provisioningState,deployments:deploymentStatus}'
 ```
 
-**Check:** the state count is greater than zero before you create the
-remediation, and the remediation finishes `Succeeded` with
-`totalDeployments` greater than zero. `Succeeded` with zero deployments means it
+**Check:** wait for that same remediation to finish `Succeeded` with
+`totalDeployments` greater than zero. Repeat only `az policy remediation show`
+to follow its status; do not create another task to wait. `Succeeded` with zero deployments means it
 found nothing to fix; repeat the scan-and-wait step instead of assuming
 coverage.
 

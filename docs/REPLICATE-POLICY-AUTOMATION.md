@@ -65,7 +65,8 @@ reuse one principal ID for both role sets.
 
 ## Qualification boundary and source pins
 
-The last joint live qualification used these public sources:
+The commands below use these public source pins. Full-guide replication and
+later component qualification are recorded separately below:
 
 | Component | Reviewed source |
 |---|---|
@@ -79,8 +80,9 @@ does not change the qualified Policy JSON or deployment scripts. If either
 repository has advanced, review its diff, record the full commit SHA, and run
 all offline checks before Azure writes.
 
-A fresh-tenant replication on 2026-09-27 passed sections 1–8 with these same
-pins in a brand-new tenant and Free Trial subscription. Sections 1–8 needed
+A fresh-tenant replication on 2026-09-27 passed sections 1–8 with the earlier
+qualified Policy core `d07fe194…` and the same Automation helper/runbook bytes
+in a brand-new tenant and Free Trial subscription. Sections 1–8 needed
 one environment-driven change, an allow-listed `AUTOMATION_LOCATION`. An
 optional VM extension also needed an available VM size. Some sections
 overlapped in that run; see the

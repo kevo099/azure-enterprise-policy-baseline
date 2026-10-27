@@ -159,6 +159,19 @@ until removed. Use the stage table to track your place.
 
 ### Understand the assignment before running it
 
+| Object | What it means here |
+|---|---|
+| Definition | One rule and its parameters, such as denying a public IP on a NIC. |
+| Initiative | A bundle of references to the sixteen definitions, with shared assignment parameters. |
+| Assignment | Applies a definition or initiative to a scope with selected values and an enforcement mode. |
+| Compliance result | An observation from an evaluation; zero returned records do not establish compliance. |
+| Remediation task | Uses an assignment's identity to repair existing resources covered by `Modify` or `DeployIfNotExists`. |
+
+Publishing new, unassigned definitions does not enforce them. Updating a custom
+definition already used by assignments changes the rule those assignments
+evaluate, so review its consumers before republishing. See Microsoft's
+[Policy object and evaluation overview](https://learn.microsoft.com/azure/governance/policy/overview#overview).
+
 `assign.sh --dry-run` **writes to Azure**: it creates an assignment with
 `enforcementMode: DoNotEnforce`, a system-assigned identity, and three RBAC
 grants. The mode suppresses automatic enforcement; a manually requested

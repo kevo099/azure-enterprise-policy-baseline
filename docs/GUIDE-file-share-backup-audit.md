@@ -43,9 +43,14 @@ AUDIT_ASSIGNMENT="azure-files-backup-audit"
 az policy assignment create \
   --name "$AUDIT_ASSIGNMENT" \
   --display-name "Audit Azure Files backup coverage" \
-  --policy "/providers/Microsoft.Authorization/policyDefinitions/cfc5190a-3b19-4a23-b563-a4c719b666e4" \
+  --policy "cfc5190a-3b19-4a23-b563-a4c719b666e4" \
   --scope "$SCOPE"
 ```
+
+Pass the built-in by its GUID name. Azure CLI 2.91 misresolves its full
+`/providers/Microsoft.Authorization/policyDefinitions/<guid>` ID; the
+[enforcement guide](GUIDE-file-share-backup-enforcement.md#continuous-enforcement-with-azure-policy)
+uses the same GUID form.
 
 For automatic protection, prefer the existing-vault, tag-exclusion
 `DeployIfNotExists` definition:

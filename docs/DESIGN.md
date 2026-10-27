@@ -94,7 +94,9 @@ Roll the initiative out in stages so that a strict default never surprises an
 existing estate:
 
 1. **Publish** the definitions and initiative at the definition scope
-   (`scripts/deploy.sh`). Definitions alone change nothing.
+   (`scripts/deploy.sh`). New, unassigned definitions enforce nothing. Updating
+   definitions already used by assignments changes their evaluations; inspect
+   those existing assignments before republishing.
 2. **Canary in report-only mode.** Assign to one owned resource group with
    `scripts/assign.sh --dry-run` (`DoNotEnforce`). Trigger a compliance scan
    and wait for nonempty state; zero rows is inconclusive, not compliant.
